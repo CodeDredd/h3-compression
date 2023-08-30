@@ -1,7 +1,7 @@
 {
   "name": "h3-compress",
   "type": "module",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "packageManager": "pnpm@8.7.0",
   "description": "Adds compression to h3 request (brotli, gzip, deflate)",
   "author": {
