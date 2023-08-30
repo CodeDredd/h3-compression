@@ -1,5 +1,5 @@
 {
-  "name": "h3-compress",
+  "name": "h3-compression",
   "type": "module",
   "version": "0.3.0",
   "packageManager": "pnpm@8.7.0",
@@ -10,15 +10,15 @@
   },
   "license": "MIT",
   "funding": "https://github.com/sponsors/codedredd",
-  "homepage": "https://github.com/CodeDredd/h3-compress#readme",
+  "homepage": "https://github.com/CodeDredd/h3-compression#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/CodeDredd/h3-compress.git"
+    "url": "git+https://github.com/CodeDredd/h3-compression.git"
   },
-  "bugs": "https://github.com/CodeDredd/h3-compress/issues",
+  "bugs": "https://github.com/CodeDredd/h3-compression/issues",
   "keywords": [
     "h3",
-    "h3-compress",
+    "h3-compression",
     "gzip",
     "brotli",
     "deflate",

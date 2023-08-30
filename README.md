@@ -1,4 +1,4 @@
-# h3-compress
+# h3-compression
 
 [![npm version][npm-version-src]][npm-version-href]
 [![npm downloads][npm-downloads-src]][npm-downloads-href]
@@ -20,13 +20,13 @@
 
 ```bash
 # Using npm
-npm install h3-compress
+npm install h3-compression
 
 # Using yarn
-yarn add h3-compress
+yarn add h3-compression
 
 # Using pnpm
-pnpm add h3-compress
+pnpm add h3-compression
 ```
 
 ## Usage
@@ -34,7 +34,7 @@ pnpm add h3-compress
 ```ts
 import { createServer } from 'node:http'
 import { createApp, eventHandler, toNodeListener } from 'h3'
-import { useCompressionStream } from 'h3-compress'
+import { useCompressionStream } from 'h3-compression'
 
 const app = createApp({ onBeforeResponse: useCompressionStream }) // or { onBeforeResponse: useCompression }
 app.use(
@@ -50,7 +50,7 @@ Example using <a href="https://github.com/unjs/listhen">listhen</a> for an elega
 ```ts
 import { createApp, eventHandler, toNodeListener } from 'h3'
 import { listen } from 'listhen'
-import { useCompressionStream } from 'h3-compress'
+import { useCompressionStream } from 'h3-compression'
 
 const app = createApp({ onBeforeResponse: useCompressionStream }) // or { onBeforeResponse: useCompression }
 app.use(
@@ -67,7 +67,7 @@ If you want to use it in nuxt 3 you can define a nitro plugin. But there only th
 Create a new file in `server/plugins/compression.ts`
 
 ````ts
-import { useCompression } from 'h3-compress'
+import { useCompression } from 'h3-compression'
 
 export default defineNitroPlugin((nitro) => {
   nitro.hooks.hook('render:response', async (response, { event }) => {
@@ -111,13 +111,13 @@ H3 has a concept of composable utilities that accept `event` (from `eventHandler
 
 <!-- Badges -->
 
-[npm-version-src]: https://img.shields.io/npm/v/h3-compress?style=flat&colorA=080f12&colorB=1fa669
-[npm-version-href]: https://npmjs.com/package/h3-compress
-[npm-downloads-src]: https://img.shields.io/npm/dm/h3-compress?style=flat&colorA=080f12&colorB=1fa669
-[npm-downloads-href]: https://npmjs.com/package/h3-compress
-[bundle-src]: https://img.shields.io/bundlephobia/minzip/h3-compress?style=flat&colorA=080f12&colorB=1fa669&label=minzip
-[bundle-href]: https://bundlephobia.com/result?p=h3-compress
-[license-src]: https://img.shields.io/github/license/CodeDredd/h3-compress.svg?style=flat&colorA=080f12&colorB=1fa669
-[license-href]: https://github.com/CodeDredd/h3-compress/blob/main/LICENSE
+[npm-version-src]: https://img.shields.io/npm/v/h3-compression?style=flat&colorA=080f12&colorB=1fa669
+[npm-version-href]: https://npmjs.com/package/h3-compression
+[npm-downloads-src]: https://img.shields.io/npm/dm/h3-compression?style=flat&colorA=080f12&colorB=1fa669
+[npm-downloads-href]: https://npmjs.com/package/h3-compression
+[bundle-src]: https://img.shields.io/bundlephobia/minzip/h3-compression?style=flat&colorA=080f12&colorB=1fa669&label=minzip
+[bundle-href]: https://bundlephobia.com/result?p=h3-compression
+[license-src]: https://img.shields.io/github/license/CodeDredd/h3-compression.svg?style=flat&colorA=080f12&colorB=1fa669
+[license-href]: https://github.com/CodeDredd/h3-compression/blob/main/LICENSE
 [jsdocs-src]: https://img.shields.io/badge/jsdocs-reference-080f12?style=flat&colorA=080f12&colorB=1fa669
-[jsdocs-href]: https://www.jsdocs.io/package/h3-compress
+[jsdocs-href]: https://www.jsdocs.io/package/h3-compression
