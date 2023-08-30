@@ -1,2 +1,12 @@
-export const one = 1
-export const two = 2
+export {
+  useGZipCompression,
+  useCompression,
+  useBrotliCompression,
+  useDeflateCompression,
+} from './compression'
+
+export {
+  useGZipCompressionStream,
+  useDeflateCompressionStream,
+  useCompressionStream,
+} from './compressionStream'
