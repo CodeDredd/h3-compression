@@ -14,5 +14,6 @@
     "skipLibCheck": true,
     "skipDefaultLibCheck": true,
     "types": ["node"]
-  }
+  },
+  "include": ["src", "test"]
 }

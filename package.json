@@ -56,7 +56,7 @@
     "release": "bumpp && npm publish",
     "start": "esno src/index.ts",
     "test": "vitest",
-    "typecheck": "tsc --noEmit",
+    "test:types": "vitest typecheck",
     "prepare": "simple-git-hooks"
   },
   "peerDependencies": {
