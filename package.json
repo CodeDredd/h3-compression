@@ -74,6 +74,7 @@
     "esno": "^0.17.0",
     "h3": "^1.8.1",
     "lint-staged": "^14.0.1",
+    "node-fetch-native": "^1.4.0",
     "pnpm": "^8.7.0",
     "rimraf": "^5.0.1",
     "simple-git-hooks": "^2.9.0",
