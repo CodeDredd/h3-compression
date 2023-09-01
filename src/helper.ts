@@ -9,7 +9,7 @@ import {
 } from 'h3'
 
 export interface RenderResponse {
-  body?: string | unknown
+  body: string | unknown
   statusCode: number
   statusMessage: string
   headers: Record<string, string>

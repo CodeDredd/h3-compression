@@ -3,8 +3,10 @@ import type { RenderResponse } from './helper'
 import { compressStream, getAnyCompression } from './helper'
 
 /**
- * Parse and validate params from event handler. Doesn't throw if validation fails.
+ * Compresses the response with
+ * [CompressionStream(gzip)]{@link https://developer.mozilla.org/en-US/docs/Web/API/CompressionStream}
  * @param event - A H3 event object.
+ * @param response - A response object with body parameter.
  */
 export async function useGZipCompressionStream(
   event: H3Event,
@@ -13,6 +15,12 @@ export async function useGZipCompressionStream(
   await compressStream(event, response, 'gzip')
 }
 
+/**
+ * Compresses the response with
+ * [CompressionStream(deflate)]{@link https://developer.mozilla.org/en-US/docs/Web/API/CompressionStream}
+ * @param event - A H3 event object.
+ * @param response - A response object with body parameter.
+ */
 export async function useDeflateCompressionStream(
   event: H3Event,
   response: Partial<RenderResponse>,
@@ -20,6 +28,13 @@ export async function useDeflateCompressionStream(
   await compressStream(event, response, 'deflate')
 }
 
+/**
+ * Compresses the response with
+ * [CompressionStream]{@link https://developer.mozilla.org/en-US/docs/Web/API/CompressionStream}
+ * by 'Accept-Encoding' header. Best is used first.
+ * @param event - A H3 event object.
+ * @param response - A response object with body parameter.
+ */
 export async function useCompressionStream(
   event: H3Event,
   response: Partial<RenderResponse>,
