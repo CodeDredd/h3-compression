@@ -6,7 +6,7 @@ export async function useGZipCompression(
   event: H3Event,
   response: Partial<RenderResponse>,
 ) {
-  await compress(event, response, 'deflate')
+  await compress(event, response, 'gzip')
 }
 
 export async function useDeflateCompression(
