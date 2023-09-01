@@ -1,4 +1,4 @@
-# h3-compression
+# H3-compression
 
 [![npm version][npm-version-src]][npm-version-href]
 [![npm downloads][npm-downloads-src]][npm-downloads-href]
@@ -6,9 +6,11 @@
 [![JSDocs][jsdocs-src]][jsdocs-href]
 [![License][license-src]][license-href]
 
+> Handles compression for H3
+
 ## Features
 
-✔️ &nbsp;**Zlib Compressions:** You can use zlib compression (brotli, gzip and deflate)
+✔️ &nbsp;**Zlib Compression:** You can use zlib compression (brotli, gzip and deflate)
 
 ✔️ &nbsp;**Stream Compression:** You can use native stream compressions (gzip, deflate)
 
@@ -61,11 +63,11 @@ app.use(
 listen(toNodeListener(app))
 ```
 
-## Nuxt 3 Usage
+## Nuxt 3
 
-If you want to use it in nuxt 3 you can define a nitro plugin. But there only the Zlib compression works
-Create a new file in `server/plugins/compression.ts`
+If you want to use it in nuxt 3 you can define a nitro plugin.
 
+`server/plugins/compression.ts`
 ````ts
 import { useCompression } from 'h3-compression'
 
@@ -78,10 +80,12 @@ export default defineNitroPlugin((nitro) => {
   })
 })
 ````
+> [!NOTE]  
+> `useCompressionStream` doesn't work right now in nitro. So you just can use `useCompression`
 
 ## Utilities
 
-H3 has a concept of composable utilities that accept `event` (from `eventHandler((event) => {})`) as their first argument and `response` as their second.
+H3-compression has a concept of composable utilities that accept `event` (from `eventHandler((event) => {})`) as their first argument and `response` as their second.
 
 #### Zlib Compression
 
@@ -103,6 +107,10 @@ H3 has a concept of composable utilities that accept `event` (from `eventHandler
     <img src='https://pinia-orm.codedredd.de/sponsorkit/sponsors.svg'/>
   </a>
 </p>
+
+## Releated Projects
+
+- [H3](https://github.com/unjs/h3)
 
 ## License
 
