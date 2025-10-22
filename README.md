@@ -74,7 +74,7 @@ import { useCompression } from 'h3-compression'
 export default defineNitroPlugin((nitro) => {
   nitro.hooks.hook('render:response', async (response, { event }) => {
     // Skip internal nuxt routes (e.g. error page)
-    if (getRequestURL(event).pathname.startsWith('/__nuxt'))
+    if (getRequestURL(event).pathname.startsWith('/_nuxt'))
       return
 
     if (!response.headers?.['content-type']?.startsWith('text/html'))
@@ -82,6 +82,32 @@ export default defineNitroPlugin((nitro) => {
 
     await useCompression(event, response)
   })
+})
+````
+> [!NOTE]  
+> `useCompressionStream` doesn't work right now in nitro. So you just can use `useCompression`
+
+## Nuxt 4
+
+If you want to use it in nuxt 4 you can define a nitro plugin with an other hook
+
+`server/plugins/compression.ts`
+````ts
+import { useCompression } from 'h3-compression'
+
+export default defineNitroPlugin((nitro) => {
+	nitro.hooks.hook('beforeResponse', async (event, res) => {
+		// Skip internal nuxt routes (e.g. error page)
+		if (getRequestURL(event).pathname.startsWith('/_nuxt')) return
+
+		const header = getResponseHeader(event, 'content-type')
+		const values = Array.isArray(header) ? header : [header]
+		const compress = values.find(t => typeof t === 'string' && t.includes('text/html'))
+		
+		if (!compress) return
+
+		await useCompression(event, res)
+	})
 })
 ````
 > [!NOTE]  
