@@ -87,6 +87,9 @@ export default defineNitroPlugin((nitro) => {
 > [!NOTE]  
 > `useCompressionStream` doesn't work right now in nitro. So you just can use `useCompression`
 
+> [!WARNING]
+> Check this issue https://github.com/CodeDredd/h3-compression/issues/10 before using with **Nuxt 4**
+
 ## Utilities
 
 H3-compression has a concept of composable utilities that accept `event` (from `eventHandler((event) => {})`) as their first argument and `response` as their second.
