@@ -74,7 +74,7 @@ import { useCompression } from 'h3-compression'
 export default defineNitroPlugin((nitro) => {
   nitro.hooks.hook('render:response', async (response, { event }) => {
     // Skip internal nuxt routes (e.g. error page)
-    if (getRequestURL(event).pathname.startsWith('/__nuxt'))
+    if (getRequestURL(event).pathname.startsWith('/_nuxt'))
       return
 
     if (!response.headers?.['content-type']?.startsWith('text/html'))
@@ -86,6 +86,9 @@ export default defineNitroPlugin((nitro) => {
 ````
 > [!NOTE]  
 > `useCompressionStream` doesn't work right now in nitro. So you just can use `useCompression`
+
+> [!WARNING]
+> Check this issue https://github.com/CodeDredd/h3-compression/issues/10 before using with **Nuxt 4**
 
 ## Utilities
 
