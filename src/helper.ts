@@ -62,21 +62,62 @@ export function getStreamCompression(event: H3Event): StreamCompression | undefi
   return undefined
 }
 
+function isReadableStream(value: unknown): boolean {
+  return typeof value === 'object' && value !== null
+    && typeof (value as ReadableStream).getReader === 'function'
+}
+
+/**
+ * Turns a response body into a buffer that can be compressed. Strings, buffers
+ * and typed arrays are used as-is; plain JSON-serializable values (e.g. objects
+ * returned from a `/server/api` route) are serialized to JSON. Returns
+ * `undefined` for bodies that can't / shouldn't be buffered (streams, empty).
+ */
+function toCompressibleBuffer(event: H3Event, body: unknown): Buffer | undefined {
+  if (typeof body === 'string')
+    return Buffer.from(body)
+
+  if (body instanceof Uint8Array)
+    return Buffer.from(body)
+
+  if (body instanceof ArrayBuffer)
+    return Buffer.from(body)
+
+  if (body === null || body === undefined || isReadableStream(body))
+    return undefined
+
+  try {
+    const json = JSON.stringify(body)
+    if (json === undefined)
+      return undefined
+    // Mirror h3, which serializes objects as JSON.
+    setResponseHeader(event, 'Content-Type', 'application/json')
+    return Buffer.from(json)
+  }
+  catch {
+    return undefined
+  }
+}
+
 export async function compress(event: H3Event, response: Partial<RenderResponse>, method: Compression) {
-  const compression = promisify(zlib[method === 'br' ? 'brotliCompress' : method])
   const acceptsEncoding = getRequestHeader(event, 'accept-encoding')?.includes(
     method,
   )
+  if (!acceptsEncoding)
+    return
 
-  if (acceptsEncoding && typeof response.body === 'string') {
-    setResponseHeader(event, 'Content-Encoding', method)
-    const compressed = await compression(Buffer.from(response.body))
-    // h3 v1 streams the body via `send`, h3 v2 expects the (mutated) body.
-    if (typeof send === 'function')
-      send(event, compressed)
-    else
-      response.body = compressed
-  }
+  const payload = toCompressibleBuffer(event, response.body)
+  if (!payload)
+    return
+
+  const compression = promisify(zlib[method === 'br' ? 'brotliCompress' : method])
+  setResponseHeader(event, 'Content-Encoding', method)
+  const compressed = await compression(payload)
+  // h3 v1 streams the body via `send`, h3 v2 expects the (mutated) body.
+  if (typeof send === 'function')
+    send(event, compressed)
+  else
+    response.body = compressed
 }
 
 export async function compressStream(event: H3Event, response: Partial<RenderResponse>, method: StreamCompression) {
