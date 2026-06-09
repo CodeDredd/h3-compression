@@ -1,13 +1,18 @@
 import type { Buffer } from 'node:buffer'
 import zlib from 'node:zlib'
 import { describe, expect, it } from 'vitest'
-import { mockEvent } from 'h3'
+import * as h3 from 'h3'
 import {
   useBrotliCompression,
   useCompression,
   useDeflateCompression,
   useGZipCompression,
 } from '../src'
+import { isV2 } from './_version'
+
+// `mockEvent` only exists in h3 v2 — access it lazily so this file still loads
+// (but is skipped) under h3 v1.
+const { mockEvent } = h3 as typeof import('h3')
 
 const html = '<h1>Hello World</h1>'
 
@@ -21,7 +26,7 @@ const decoders: Record<string, (input: Buffer) => Buffer> = {
   br: zlib.brotliDecompressSync,
 }
 
-describe('useCompression (mutable response / nitro path)', () => {
+describe.runIf(isV2)('useCompression (mutable response / nitro path)', () => {
   it('compresses the body with gzip', async () => {
     const event = eventFor('gzip')
     const response = { body: html }

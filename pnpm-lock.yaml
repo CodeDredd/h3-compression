@@ -5111,7 +5111,7 @@ packages:
       defu: 6.1.7
       https-proxy-agent: 5.0.1
       mri: 1.2.0
-      node-fetch-native: 1.4.0
+      node-fetch-native: 1.6.7
       pathe: 1.1.1
       tar: 6.1.13
     transitivePeerDependencies:
@@ -6402,7 +6402,7 @@ packages:
       chokidar: 3.5.3
       citty: 0.1.6
       consola: 3.4.2
-      cookie-es: 1.0.0
+      cookie-es: 1.2.3
       defu: 6.1.7
       destr: 2.0.5
       dot-prop: 8.0.2
@@ -6432,7 +6432,7 @@ packages:
       perfect-debounce: 1.0.0
       pkg-types: 1.3.1
       pretty-bytes: 6.1.1
-      radix3: 1.1.0
+      radix3: 1.1.2
       rollup: 3.28.1
       rollup-plugin-visualizer: 5.9.2(rollup@3.28.1)
       scule: 1.3.0
@@ -7509,10 +7509,6 @@ packages:
 
   /queue-microtask@1.2.3:
     resolution: {integrity: sha512-NuaNSa6flKT5JaSYQzJok04JzTL1CA6aGhv5rfLW3PgqA+M2ChpZQnAC8h8i4ZFkBS8X5RqkDBHA7r4hej3K9A==}
-    dev: true
-
-  /radix3@1.1.0:
-    resolution: {integrity: sha512-pNsHDxbGORSvuSScqNJ+3Km6QAVqk8CfsCBIEoDgpqLrkD2f3QM4I7d1ozJJ172OmIcoUcerZaNWqtLkRXTV3A==}
     dev: true
 
   /radix3@1.1.2:
