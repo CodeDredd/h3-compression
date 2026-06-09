@@ -16,6 +16,8 @@
 
 ✔️ &nbsp;**Compression Detection:** It uses the best compression which is accepted
 
+✔️ &nbsp;**h3 v1 & v2:** Works with both [h3](https://h3.dev) v1 and v2
+
 
 
 ## Install
@@ -31,7 +33,7 @@ yarn add h3-compression
 pnpm add h3-compression
 ```
 
-## Usage
+## Usage (h3 v1)
 
 ```ts
 import { createServer } from 'node:http'
@@ -62,6 +64,32 @@ app.use(
 
 listen(toNodeListener(app))
 ```
+
+## Usage (h3 v2)
+
+In [h3 v2](https://h3.dev) the response is an immutable web `Response` and the `onBeforeResponse`
+hook was removed. Use the `compression` / `compressionStream` middleware instead — they read the
+response returned by the next handler and replace it with a compressed one.
+
+```ts
+import { createServer } from 'node:http'
+import { H3, toNodeHandler } from 'h3'
+import { compression } from 'h3-compression'
+
+const app = new H3()
+
+app.use(compression()) // or app.use(compressionStream())
+app.get('/', () => 'Hello world!')
+
+createServer(toNodeHandler(app)).listen(process.env.PORT || 3000)
+```
+
+You can also force a specific method (e.g. `compression('gzip')`) instead of detecting it from the
+`Accept-Encoding` header.
+
+> [!NOTE]
+> `compressionStream` uses the native [`CompressionStream`](https://developer.mozilla.org/en-US/docs/Web/API/CompressionStream),
+> which only supports `gzip` and `deflate` (no brotli).
 
 ## Nuxt 3 & 4
 
@@ -103,6 +131,13 @@ H3-compression has a concept of composable utilities that accept `event` (from `
 - `useGZipCompressionStream(event, response)`
 - `useDeflateCompressionStream(event, response)`
 - `useCompressionStream(event, response)`
+
+#### Middleware (h3 v2)
+
+- `compression(method?)` &nbsp;– middleware using zlib (brotli, gzip, deflate)
+- `compressionStream(method?)` &nbsp;– middleware using the native `CompressionStream` (gzip, deflate)
+- `compressResponse(event, value, method?)` &nbsp;– low-level helper returning a compressed `Response`
+- `compressResponseStream(event, value, method?)` &nbsp;– low-level stream helper returning a compressed `Response`
 
 ## Sponsors
 
