@@ -37,6 +37,18 @@ describe.runIf(isV2)('useCompression (mutable response / nitro path)', () => {
     expect(decoders.gzip(response.body as Buffer).toString()).toEqual(html)
   })
 
+  it('compresses an object (JSON) body and sets the content-type (#8)', async () => {
+    const event = eventFor('gzip')
+    const json = { message: 'hello world', items: [1, 2, 3] }
+    const response: { body: unknown } = { body: json }
+
+    await useGZipCompression(event, response)
+
+    expect(event.res.headers.get('content-encoding')).toEqual('gzip')
+    expect(event.res.headers.get('content-type')).toContain('application/json')
+    expect(JSON.parse(decoders.gzip(response.body as Buffer).toString())).toEqual(json)
+  })
+
   it('compresses the body with deflate', async () => {
     const event = eventFor('deflate')
     const response = { body: html }

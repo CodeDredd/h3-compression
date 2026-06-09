@@ -115,6 +115,32 @@ export default defineNitroPlugin((nitro) => {
 > [!NOTE]  
 > `useCompressionStream` doesn't work right now in nitro. So you just can use `useCompression`
 
+### Cached routes (SWR / ISR) and `/server/api`
+
+The `render:response` hook only runs for freshly rendered SSR pages. Responses served
+from the Nitro route cache (`routeRules` with `swr` / `isr`) and `/server/api` handlers
+go through the `beforeResponse` hook instead. Use it to compress those too:
+
+`server/plugins/compression.ts`
+````ts
+import { useCompression } from 'h3-compression'
+
+export default defineNitroPlugin((nitro) => {
+  nitro.hooks.hook('beforeResponse', async (event, response) => {
+    // Skip internal nuxt routes (e.g. error page)
+    if (['/_nuxt', '/__nuxt'].some(prefix => event.path.startsWith(prefix)))
+      return
+
+    await useCompression(event, response)
+  })
+})
+````
+
+`useCompression` compresses string, `Buffer`/`Uint8Array` and JSON (object) bodies and
+skips everything else (e.g. streams), so binary assets are left untouched. If you only
+want to compress specific content types, guard on `response.headers?.['content-type']`
+before calling it.
+
 ## Utilities
 
 H3-compression has a concept of composable utilities that accept `event` (from `eventHandler((event) => {})`) as their first argument and `response` as their second.
