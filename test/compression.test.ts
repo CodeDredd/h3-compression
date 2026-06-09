@@ -1,48 +1,74 @@
-import type { SuperTest, Test } from 'supertest'
-import supertest from 'supertest'
-import { beforeEach, describe, expect, it } from 'vitest'
-import type { App } from 'h3'
-import { createApp, eventHandler, toNodeListener } from 'h3'
-import { useCompression } from '../src'
+import type { Buffer } from 'node:buffer'
+import zlib from 'node:zlib'
+import { describe, expect, it } from 'vitest'
+import { mockEvent } from 'h3'
+import {
+  useBrotliCompression,
+  useCompression,
+  useDeflateCompression,
+  useGZipCompression,
+} from '../src'
 
-describe('use compression', () => {
-  let app: App
-  let request: SuperTest<Test>
+const html = '<h1>Hello World</h1>'
 
-  beforeEach(() => {
-    app = createApp({ debug: true, onBeforeResponse: useCompression })
-    app.use('/', eventHandler({
-      handler: () => {
-        return '<h1>Hello World</h1>'
-      },
-    }))
-    request = supertest(toNodeListener(app))
+function eventFor(encoding: string) {
+  return mockEvent('/', { headers: { 'accept-encoding': encoding } })
+}
+
+const decoders: Record<string, (input: Buffer) => Buffer> = {
+  gzip: zlib.gunzipSync,
+  deflate: zlib.inflateSync,
+  br: zlib.brotliDecompressSync,
+}
+
+describe('useCompression (mutable response / nitro path)', () => {
+  it('compresses the body with gzip', async () => {
+    const event = eventFor('gzip')
+    const response = { body: html }
+
+    await useGZipCompression(event, response)
+
+    expect(event.res.headers.get('content-encoding')).toEqual('gzip')
+    expect(decoders.gzip(response.body as Buffer).toString()).toEqual(html)
   })
 
-  it('returns 200 OK with gzip compression', async () => {
-    const result = await request
-      .get('/')
-      .set('Accept-Encoding', 'gzip')
+  it('compresses the body with deflate', async () => {
+    const event = eventFor('deflate')
+    const response = { body: html }
 
-    expect(result.status).toEqual(200)
-    expect(result.headers['content-encoding']).toEqual('gzip')
+    await useDeflateCompression(event, response)
+
+    expect(event.res.headers.get('content-encoding')).toEqual('deflate')
+    expect(decoders.deflate(response.body as Buffer).toString()).toEqual(html)
   })
 
-  it('returns 200 OK with deflate compression', async () => {
-    const result = await request
-      .get('/')
-      .set('Accept-Encoding', 'deflate')
+  it('compresses the body with brotli', async () => {
+    const event = eventFor('br')
+    const response = { body: html }
 
-    expect(result.status).toEqual(200)
-    expect(result.headers['content-encoding']).toEqual('deflate')
+    await useBrotliCompression(event, response)
+
+    expect(event.res.headers.get('content-encoding')).toEqual('br')
+    expect(decoders.br(response.body as Buffer).toString()).toEqual(html)
   })
 
-  it('returns 200 OK with brotli compression', async () => {
-    const result = await request
-      .get('/')
-      .set('Accept-Encoding', 'br')
+  it('picks the best accepted compression', async () => {
+    const event = eventFor('gzip, deflate, br')
+    const response = { body: html }
 
-    expect(result.status).toEqual(200)
-    expect(result.headers['content-encoding']).toEqual('br')
+    await useCompression(event, response)
+
+    expect(event.res.headers.get('content-encoding')).toEqual('br')
+    expect(decoders.br(response.body as Buffer).toString()).toEqual(html)
+  })
+
+  it('does nothing when no compression is accepted', async () => {
+    const event = eventFor('identity')
+    const response = { body: html }
+
+    await useCompression(event, response)
+
+    expect(event.res.headers.get('content-encoding')).toBeNull()
+    expect(response.body).toEqual(html)
   })
 })
