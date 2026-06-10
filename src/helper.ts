@@ -17,13 +17,18 @@ export type Compression = 'gzip' | 'deflate' | 'br'
 export type StreamCompression = 'gzip' | 'deflate'
 
 /**
- * `send` was removed and `toResponse` was added in h3 v2. They are accessed
- * dynamically so this package keeps working with both h3 v1 and v2.
+ * `send` (h3 v1) and `toResponse` (h3 v2) each only exist in a single major
+ * version. They are read through a runtime key so that bundlers (Nuxt / Nitro /
+ * Rollup re-bundling `dist/index.mjs`) don't turn the namespace member access
+ * into a static `import { toResponse } from 'h3'`, which would fail on the other
+ * version (see issue: Nuxt build error `"toResponse" is not exported by h3`).
  */
-const send = (h3 as { send?: (event: H3Event, data?: unknown) => unknown }).send
-const toResponse = (h3 as {
-  toResponse?: (val: unknown, event: H3Event) => Response | Promise<Response>
-}).toResponse
+function h3Export<T>(name: string): T | undefined {
+  return (h3 as Record<string, unknown>)[name] as T | undefined
+}
+
+const send = h3Export<(event: H3Event, data?: unknown) => unknown>('send')
+const toResponse = h3Export<(val: unknown, event: H3Event) => Response | Promise<Response>>('toResponse')
 
 /**
  * Returns the best compression accepted by the client via the
