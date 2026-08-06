@@ -5,6 +5,7 @@ import supertest from 'supertest'
 import { beforeEach, describe, expect, it } from 'vitest'
 import * as h3 from 'h3'
 import { isZstdSupported, useCompression, useCompressionStream } from '../src'
+import { applyCompression } from '../src/runtime/nitro-plugin'
 import { isV1 } from './_version'
 
 // `node:zlib` gained zstd in Node 22.15.0 / 23.8.0.
@@ -174,6 +175,41 @@ describe.runIf(isV1)('zstd on the h3 v1 app hook (#7)', () => {
 
     expect(result.status).toEqual(200)
     expect(result.headers['content-encoding']).toEqual('gzip')
+    expect(result.text).toEqual(html)
+  })
+})
+
+describe.runIf(isV1)('nuxt plugin on h3 v1 (#22)', () => {
+  it('compresses an html response through the plugin logic', async () => {
+    const request = appWith((event, response) => applyCompression(event, response, {}))
+    const result = await request.get('/').set('Accept-Encoding', 'gzip')
+
+    expect(result.status).toEqual(200)
+    expect(result.headers['content-encoding']).toEqual('gzip')
+    expect(result.text).toEqual(html)
+  })
+
+  it('skips nuxt internal routes using the v1 `path` property', async () => {
+    const app = createApp({
+      debug: true,
+      onBeforeResponse: (event, response) => applyCompression(event, response, {}),
+    })
+    app.use('/_nuxt/entry.js', eventHandler(() => html))
+    const result = await supertest(toNodeListener(app))
+      .get('/_nuxt/entry.js')
+      .set('Accept-Encoding', 'gzip')
+
+    expect(result.status).toEqual(200)
+    expect(result.headers['content-encoding']).toBeUndefined()
+    expect(result.text).toEqual(html)
+  })
+
+  it('respects the threshold on the v1 path', async () => {
+    const request = appWith((event, response) => applyCompression(event, response, { threshold: 4096 }))
+    const result = await request.get('/').set('Accept-Encoding', 'gzip')
+
+    expect(result.status).toEqual(200)
+    expect(result.headers['content-encoding']).toBeUndefined()
     expect(result.text).toEqual(html)
   })
 })

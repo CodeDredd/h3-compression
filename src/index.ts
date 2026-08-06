@@ -20,6 +20,8 @@ export {
 } from './middleware'
 
 export {
+  compress,
+  compressStream,
   compressResponse,
   compressResponseStream,
   getAnyCompression,

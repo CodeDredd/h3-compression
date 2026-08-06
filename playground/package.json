@@ -8,6 +8,9 @@
     "preview": "nuxt preview",
     "postinstall": "nuxt prepare"
   },
+  "dependencies": {
+    "h3-compression": "workspace:*"
+  },
   "devDependencies": {
     "@nuxt/devtools": "^0.8.2",
     "nuxt": "^3.7.0"

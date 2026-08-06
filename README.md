@@ -18,6 +18,8 @@
 
 ✔️ &nbsp;**h3 v1 & v2:** Works with both [h3](https://h3.dev) v1 and v2
 
+✔️ &nbsp;**Nuxt module:** Drop `h3-compression/nuxt` into `nuxt.config` and configure it there
+
 
 
 ## Install
@@ -148,13 +150,62 @@ app.use(compression({ zstd: isZstdSupported() }))
 
 ## Nuxt 3 & 4
 
-If you want to use it in Nuxt you can define a nitro plugin.
+Add the module and you're done — it wires the right Nitro hooks, skips Nuxt's internal
+routes and filters by content type for you:
+
+```ts
+// nuxt.config.ts
+export default defineNuxtConfig({
+  modules: ['h3-compression/nuxt'],
+})
+```
+
+Everything is configurable under the `compression` key:
+
+```ts
+export default defineNuxtConfig({
+  modules: ['h3-compression/nuxt'],
+  compression: {
+    enabled: true,
+    encoding: 'zlib', // or 'stream'
+    brotli: false, // stream path only — zlib always prefers brotli
+    zstd: false, // needs Node >= 22.15
+    method: undefined, // force one method instead of negotiating
+    contentTypes: ['text/', 'application/json', 'application/javascript', 'application/xml', 'image/svg+xml'],
+    exclude: ['/_nuxt', '/__nuxt'],
+    routeRules: true, // also compress cached (swr/isr) routes and /server/api
+    threshold: 0, // skip bodies smaller than this many bytes
+  },
+})
+```
+
+| Option | Default | What it does |
+| --- | --- | --- |
+| `enabled` | `true` | Turn compression off without removing the module |
+| `encoding` | `'zlib'` | `'zlib'` buffers the body; `'stream'` pipes it through a compression transform |
+| `brotli` | `false` | Consider brotli when negotiating. Only meaningful for `'stream'` — the zlib path already prefers brotli |
+| `zstd` | `false` | Consider zstd when negotiating. Ignored on Node < 22.15, see [Zstd](#zstd) |
+| `method` | – | Force one method instead of negotiating from `Accept-Encoding` |
+| `contentTypes` | text, JSON, JS, XML, SVG | Prefix match against `Content-Type`. Set to `[]` to compress everything |
+| `exclude` | `['/_nuxt', '/__nuxt']` | Path prefixes to skip. Compressing these breaks Nuxt's error page |
+| `routeRules` | `true` | Also attach to `beforeResponse`, which is what cached (`swr`/`isr`) routes and `/server/api` handlers go through |
+| `threshold` | `0` | Skip bodies below this size — under roughly a kilobyte compression makes payloads *larger*. Ignored for `'stream'`, where the size is not known up front |
+
+> [!NOTE]
+> `contentTypes` and `exclude` **replace** the defaults rather than extending them.
+> Spread the defaults in if you want to add to them.
+
+### Doing it manually
+
+The module is a convenience wrapper — the hooks are still yours to wire if you want
+different behaviour per route:
 
 `server/plugins/compression.ts`
 ````ts
 import { useCompression } from 'h3-compression'
 
 export default defineNitroPlugin((nitro) => {
+  // Freshly rendered SSR pages.
   nitro.hooks.hook('render:response', async (response, { event }) => {
     // Skip internal nuxt routes (e.g. error page)
     if (['/_nuxt', '/__nuxt'].some(prefix => getRequestURL(event).pathname.startsWith(prefix)))
@@ -165,24 +216,11 @@ export default defineNitroPlugin((nitro) => {
 
     await useCompression(event, response)
   })
-})
-````
-> [!NOTE]  
-> `useCompressionStream` doesn't work right now in nitro. So you just can use `useCompression`
 
-### Cached routes (SWR / ISR) and `/server/api`
-
-The `render:response` hook only runs for freshly rendered SSR pages. Responses served
-from the Nitro route cache (`routeRules` with `swr` / `isr`) and `/server/api` handlers
-go through the `beforeResponse` hook instead. Use it to compress those too:
-
-`server/plugins/compression.ts`
-````ts
-import { useCompression } from 'h3-compression'
-
-export default defineNitroPlugin((nitro) => {
+  // The `render:response` hook only runs for freshly rendered SSR pages.
+  // Responses served from the Nitro route cache (`routeRules` with `swr` / `isr`)
+  // and `/server/api` handlers go through `beforeResponse` instead.
   nitro.hooks.hook('beforeResponse', async (event, response) => {
-    // Skip internal nuxt routes (e.g. error page)
     if (['/_nuxt', '/__nuxt'].some(prefix => event.path.startsWith(prefix)))
       return
 
@@ -223,6 +261,10 @@ H3-compression has a concept of composable utilities that accept `event` (from `
 - `compressResponse(event, value, method?, options?)` &nbsp;– low-level helper returning a compressed `Response`
 - `compressResponseStream(event, value, method?, options?)` &nbsp;– low-level stream helper returning a compressed `Response`
 - `isZstdSupported()` &nbsp;– whether the runtime can compress with zstd
+
+#### Nuxt
+
+- `h3-compression/nuxt` &nbsp;– the Nuxt module, configured under the `compression` key
 
 ## Sponsors
 

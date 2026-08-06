@@ -72,5 +72,5 @@ export async function useCompression(
 ): Promise<void> {
   const compression = getAnyCompression(event, options)
   if (compression)
-    await compress(event, response, compression)
+    await compress(event, response, compression, options)
 }
