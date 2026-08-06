@@ -8,6 +8,7 @@ export {
 export {
   useGZipCompressionStream,
   useDeflateCompressionStream,
+  useBrotliCompressionStream,
   useCompressionStream,
 } from './compressionStream'
 
@@ -26,7 +27,8 @@ export {
 export type {
   Compression,
   StreamCompression,
+  StreamCompressionOptions,
   RenderResponse,
 } from './helper'
 
-export type { CompressionMiddleware } from './middleware'
+export type { CompressionMiddleware, CompressionStreamOptions } from './middleware'

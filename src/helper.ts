@@ -1,6 +1,7 @@
 import { promisify } from 'node:util'
 import zlib from 'node:zlib'
 import { Buffer } from 'node:buffer'
+import { Duplex } from 'node:stream'
 import type { H3Event } from 'h3'
 import * as h3 from 'h3'
 
@@ -14,7 +15,17 @@ export interface RenderResponse {
 }
 
 export type Compression = 'gzip' | 'deflate' | 'br'
-export type StreamCompression = 'gzip' | 'deflate'
+export type StreamCompression = 'gzip' | 'deflate' | 'br'
+
+export interface StreamCompressionOptions {
+  /**
+   * Consider brotli when picking a compression from the `Accept-Encoding`
+   * header. Off by default because brotli is noticeably more CPU-expensive
+   * per request than gzip. Forcing `'br'` explicitly works without this flag.
+   * @default false
+   */
+  brotli?: boolean
+}
 
 /**
  * `send` (h3 v1) and `toResponse` (h3 v2) each only exist in a single major
@@ -51,13 +62,21 @@ export function getAnyCompression(event: H3Event): Compression | undefined {
 }
 
 /**
- * Returns the best stream compression accepted by the client. The native
- * `CompressionStream` only supports gzip and deflate, so brotli is ignored.
+ * Returns the best stream compression accepted by the client. Brotli is only
+ * considered when it is enabled via `options.brotli`, otherwise gzip is
+ * preferred, then deflate.
  * @param { H3Event } event - A H3 event object.
+ * @param { StreamCompressionOptions } [options] - Opt into brotli detection.
  * @returns { StreamCompression | undefined }
  */
-export function getStreamCompression(event: H3Event): StreamCompression | undefined {
+export function getStreamCompression(
+  event: H3Event,
+  options: StreamCompressionOptions = {},
+): StreamCompression | undefined {
   const encoding = getRequestHeader(event, 'accept-encoding')
+  if (options.brotli && encoding?.includes('br'))
+    return 'br'
+
   if (encoding?.includes('gzip'))
     return 'gzip'
 
@@ -65,6 +84,26 @@ export function getStreamCompression(event: H3Event): StreamCompression | undefi
     return 'deflate'
 
   return undefined
+}
+
+/**
+ * Creates the transform used to compress a response body stream.
+ *
+ * The native `CompressionStream` implements the WHATWG `CompressionFormat`
+ * enum, which only defines gzip, deflate and deflate-raw — brotli is therefore
+ * streamed through `node:zlib` instead. `BROTLI_OPERATION_FLUSH` is required
+ * to keep the output chunked; with zlib's defaults brotli buffers the whole
+ * body until the source closes, which defeats the point of a stream.
+ * @param { StreamCompression } method - The compression to apply.
+ * @returns { ReadableWritablePair<Uint8Array, Uint8Array> }
+ */
+function createCompressionTransform(method: StreamCompression): ReadableWritablePair<Uint8Array, Uint8Array> {
+  if (method !== 'br')
+    return new CompressionStream(method)
+
+  return Duplex.toWeb(zlib.createBrotliCompress({
+    flush: zlib.constants.BROTLI_OPERATION_FLUSH,
+  })) as unknown as ReadableWritablePair<Uint8Array, Uint8Array>
 }
 
 function isReadableStream(value: unknown): boolean {
@@ -133,7 +172,7 @@ export async function compressStream(event: H3Event, response: Partial<RenderRes
 
   if (acceptsEncoding) {
     setResponseHeader(event, 'Content-Encoding', method)
-    response.body = stream.pipeThrough(new CompressionStream(method))
+    response.body = stream.pipeThrough(createCompressionTransform(method))
   }
   else {
     response.body = stream
@@ -194,14 +233,20 @@ export async function compressResponse(event: H3Event, value: unknown, method?: 
  * @param { H3Event } event - A H3 event object.
  * @param { unknown } value - The value returned by the next handler.
  * @param { StreamCompression } [method] - Force a specific compression method.
+ * @param { StreamCompressionOptions } [options] - Opt into brotli detection.
  * @returns { Promise<Response> }
  */
-export async function compressResponseStream(event: H3Event, value: unknown, method?: StreamCompression): Promise<Response> {
+export async function compressResponseStream(
+  event: H3Event,
+  value: unknown,
+  method?: StreamCompression,
+  options?: StreamCompressionOptions,
+): Promise<Response> {
   const response = await ensureToResponse()(value, event)
-  const compressionMethod = method ?? getStreamCompression(event)
+  const compressionMethod = method ?? getStreamCompression(event, options)
 
   if (!compressionMethod || !response.body || response.headers.has('Content-Encoding'))
     return response
 
-  return cloneResponse(response, response.body.pipeThrough(new CompressionStream(compressionMethod)), compressionMethod)
+  return cloneResponse(response, response.body.pipeThrough(createCompressionTransform(compressionMethod)), compressionMethod)
 }
