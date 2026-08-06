@@ -4,8 +4,11 @@ import type { SuperTest, Test } from 'supertest'
 import supertest from 'supertest'
 import { beforeEach, describe, expect, it } from 'vitest'
 import * as h3 from 'h3'
-import { useCompression, useCompressionStream } from '../src'
+import { isZstdSupported, useCompression, useCompressionStream } from '../src'
 import { isV1 } from './_version'
+
+// `node:zlib` gained zstd in Node 22.15.0 / 23.8.0.
+const hasZstd = isZstdSupported()
 
 // superagent does not auto-decode brotli, so read the raw bytes ourselves.
 function rawParser(res: any, cb: (err: Error | null, body: Buffer) => void) {
@@ -136,5 +139,41 @@ describe.runIf(isV1)('useCompressionStream (h3 v1 app hook)', () => {
     expect(result.status).toEqual(200)
     expect(result.headers['content-encoding']).toEqual('br')
     expect(zlib.brotliDecompressSync(result.body).toString()).toEqual(html)
+  })
+})
+
+describe.runIf(isV1)('zstd on the h3 v1 app hook (#7)', () => {
+  it('ignores zstd by default and falls back to gzip', async () => {
+    const result = await appWith(useCompression).get('/').set('Accept-Encoding', 'zstd, gzip')
+
+    expect(result.status).toEqual(200)
+    expect(result.headers['content-encoding']).toEqual('gzip')
+    expect(result.text).toEqual(html)
+  })
+
+  it.runIf(hasZstd)('compresses with zstd when enabled via options', async () => {
+    const zstdRequest = appWith((event, response) =>
+      useCompression(event, response, { zstd: true }),
+    )
+    const result = await zstdRequest
+      .get('/')
+      .set('Accept-Encoding', 'zstd, gzip')
+      .buffer(true)
+      .parse(rawParser)
+
+    expect(result.status).toEqual(200)
+    expect(result.headers['content-encoding']).toEqual('zstd')
+    expect(zlib.zstdDecompressSync(result.body).toString()).toEqual(html)
+  })
+
+  it.runIf(!hasZstd)('falls back to gzip on runtimes without zstd', async () => {
+    const zstdRequest = appWith((event, response) =>
+      useCompression(event, response, { zstd: true }),
+    )
+    const result = await zstdRequest.get('/').set('Accept-Encoding', 'zstd, gzip')
+
+    expect(result.status).toEqual(200)
+    expect(result.headers['content-encoding']).toEqual('gzip')
+    expect(result.text).toEqual(html)
   })
 })

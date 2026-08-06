@@ -21,7 +21,7 @@ jobs:
       - name: Set node
         uses: actions/setup-node@v3
         with:
-          node-version: 18.x
+          node-version: 20.x
 
       - name: Setup
         run: npm i -g @antfu/ni
@@ -37,7 +37,10 @@ jobs:
 
     strategy:
       matrix:
-        node: [18, 20]
+        # 20 is the floor (matches h3's `engines`) and has no zstd in
+        # `node:zlib`; 22 and 24 do (added in 22.15 / 23.8), so both the zstd
+        # path and its fallback get exercised.
+        node: [20, 22, 24]
         h3: [1, 2]
         os: [ubuntu-latest, macos-latest]
       fail-fast: false
