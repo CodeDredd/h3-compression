@@ -12,7 +12,7 @@
 
 ✔️ &nbsp;**Zlib Compression:** You can use zlib compression (brotli, gzip and deflate)
 
-✔️ &nbsp;**Stream Compression:** You can use native stream compressions (gzip, deflate)
+✔️ &nbsp;**Stream Compression:** You can use stream compressions (gzip, deflate and opt-in brotli)
 
 ✔️ &nbsp;**Compression Detection:** It uses the best compression which is accepted
 
@@ -87,9 +87,34 @@ createServer(toNodeHandler(app)).listen(process.env.PORT || 3000)
 You can also force a specific method (e.g. `compression('gzip')`) instead of detecting it from the
 `Accept-Encoding` header.
 
+## Brotli and stream compression
+
+The native [`CompressionStream`](https://developer.mozilla.org/en-US/docs/Web/API/CompressionStream)
+implements the WHATWG `CompressionFormat` enum, which only defines `gzip`, `deflate` and
+`deflate-raw` — there is no brotli format. This package therefore streams brotli through
+`node:zlib` instead, so it is available wherever `node:zlib` is (Node, and runtimes with node
+compatibility), but not on pure edge runtimes.
+
+Because brotli is noticeably more CPU-expensive per request than gzip, it is **never picked
+automatically**. Turn it on with the `brotli` flag, or force it as the method:
+
+```ts
+app.use(compressionStream()) // gzip / deflate — unchanged default
+app.use(compressionStream({ brotli: true })) // brotli, then gzip, then deflate
+app.use(compressionStream('br')) // always brotli
+```
+
+The same flag works for the composable:
+
+```ts
+await useCompressionStream(event, response, { brotli: true })
+// or explicitly
+await useBrotliCompressionStream(event, response)
+```
+
 > [!NOTE]
-> `compressionStream` uses the native [`CompressionStream`](https://developer.mozilla.org/en-US/docs/Web/API/CompressionStream),
-> which only supports `gzip` and `deflate` (no brotli).
+> The brotli stream is flushed per chunk (`BROTLI_OPERATION_FLUSH`) so that streamed responses
+> stay streamed. With zlib's defaults brotli buffers the whole body until the source closes.
 
 ## Nuxt 3 & 4
 
@@ -156,14 +181,15 @@ H3-compression has a concept of composable utilities that accept `event` (from `
 
 - `useGZipCompressionStream(event, response)`
 - `useDeflateCompressionStream(event, response)`
-- `useCompressionStream(event, response)`
+- `useBrotliCompressionStream(event, response)`
+- `useCompressionStream(event, response, options?)` &nbsp;– pass `{ brotli: true }` to include brotli
 
 #### Middleware (h3 v2)
 
 - `compression(method?)` &nbsp;– middleware using zlib (brotli, gzip, deflate)
-- `compressionStream(method?)` &nbsp;– middleware using the native `CompressionStream` (gzip, deflate)
+- `compressionStream(method | options?)` &nbsp;– stream middleware (gzip, deflate, opt-in brotli)
 - `compressResponse(event, value, method?)` &nbsp;– low-level helper returning a compressed `Response`
-- `compressResponseStream(event, value, method?)` &nbsp;– low-level stream helper returning a compressed `Response`
+- `compressResponseStream(event, value, method?, options?)` &nbsp;– low-level stream helper returning a compressed `Response`
 
 ## Sponsors
 

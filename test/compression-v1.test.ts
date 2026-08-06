@@ -114,4 +114,27 @@ describe.runIf(isV1)('useCompressionStream (h3 v1 app hook)', () => {
     expect(result.headers['content-encoding']).toEqual('deflate')
     expect(result.text).toEqual(html)
   })
+
+  it('ignores brotli by default and falls back to gzip (#19)', async () => {
+    const result = await request.get('/').set('Accept-Encoding', 'br, gzip')
+
+    expect(result.status).toEqual(200)
+    expect(result.headers['content-encoding']).toEqual('gzip')
+    expect(result.text).toEqual(html)
+  })
+
+  it('picks brotli when enabled via options (#19)', async () => {
+    const brotliRequest = appWith((event, response) =>
+      useCompressionStream(event, response, { brotli: true }),
+    )
+    const result = await brotliRequest
+      .get('/')
+      .set('Accept-Encoding', 'br, gzip')
+      .buffer(true)
+      .parse(rawParser)
+
+    expect(result.status).toEqual(200)
+    expect(result.headers['content-encoding']).toEqual('br')
+    expect(zlib.brotliDecompressSync(result.body).toString()).toEqual(html)
+  })
 })
