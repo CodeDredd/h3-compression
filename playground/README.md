@@ -72,7 +72,7 @@ so build the playground with h3 v1 installed at the root, otherwise Nitro and
 ```bash
 pnpm add -D h3@^1.8.0 --ignore-scripts   # in the repo root
 pnpm build                                # rebuild dist/
-cd playground && pnpm build
+cd playground && pnpm nuxt:prepare && pnpm build
 ```
 
 This only affects the workspace. A real install resolves `h3` from the consuming app.
