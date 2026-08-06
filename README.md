@@ -10,9 +10,9 @@
 
 ## Features
 
-✔️ &nbsp;**Zlib Compression:** You can use zlib compression (brotli, gzip and deflate)
+✔️ &nbsp;**Zlib Compression:** You can use zlib compression (brotli, gzip, deflate and opt-in zstd)
 
-✔️ &nbsp;**Stream Compression:** You can use stream compressions (gzip, deflate and opt-in brotli)
+✔️ &nbsp;**Stream Compression:** You can use stream compressions (gzip, deflate and opt-in brotli / zstd)
 
 ✔️ &nbsp;**Compression Detection:** It uses the best compression which is accepted
 
@@ -116,6 +116,36 @@ await useBrotliCompressionStream(event, response)
 > The brotli stream is flushed per chunk (`BROTLI_OPERATION_FLUSH`) so that streamed responses
 > stay streamed. With zlib's defaults brotli buffers the whole body until the source closes.
 
+## Zstd
+
+Zstd is supported on both paths, and is opt-in for a different reason than brotli: `node:zlib`
+only gained zstd in **Node 22.15.0** (and 23.8.0). Enabling it by default would make the
+negotiated `Content-Encoding` depend on the Node version the app happens to run on, which is a
+poor thing to discover in production. The package itself only requires Node >= 20.11.1, the same
+floor as h3.
+
+```ts
+app.use(compression({ zstd: true })) // zstd, then brotli, then gzip, then deflate
+app.use(compressionStream({ zstd: true, brotli: true })) // same order, streamed
+
+await useCompression(event, response, { zstd: true })
+```
+
+Behaviour on a runtime without zstd:
+
+- with the `zstd: true` **flag**, zstd is skipped during negotiation and the next accepted
+  encoding is used — no error, no special-casing needed in your code
+- when **forced** (`compression('zstd')`, `useZstdCompression`), a `TypeError` naming the
+  required Node version is thrown, because silently sending something else would be worse
+
+Branch on it yourself with the exported predicate:
+
+```ts
+import { isZstdSupported } from 'h3-compression'
+
+app.use(compression({ zstd: isZstdSupported() }))
+```
+
 ## Nuxt 3 & 4
 
 If you want to use it in Nuxt you can define a nitro plugin.
@@ -175,21 +205,24 @@ H3-compression has a concept of composable utilities that accept `event` (from `
 - `useGZipCompression(event, response)`
 - `useDeflateCompression(event, response)`
 - `useBrotliCompression(event, response)`
-- `useCompression(event, response)`
+- `useZstdCompression(event, response)` &nbsp;– requires Node >= 22.15
+- `useCompression(event, response, options?)` &nbsp;– pass `{ zstd: true }` to include zstd
 
 #### Stream Compression
 
 - `useGZipCompressionStream(event, response)`
 - `useDeflateCompressionStream(event, response)`
 - `useBrotliCompressionStream(event, response)`
-- `useCompressionStream(event, response, options?)` &nbsp;– pass `{ brotli: true }` to include brotli
+- `useZstdCompressionStream(event, response)` &nbsp;– requires Node >= 22.15
+- `useCompressionStream(event, response, options?)` &nbsp;– pass `{ brotli: true }` / `{ zstd: true }`
 
 #### Middleware (h3 v2)
 
-- `compression(method?)` &nbsp;– middleware using zlib (brotli, gzip, deflate)
-- `compressionStream(method | options?)` &nbsp;– stream middleware (gzip, deflate, opt-in brotli)
-- `compressResponse(event, value, method?)` &nbsp;– low-level helper returning a compressed `Response`
+- `compression(method | options?)` &nbsp;– middleware using zlib (brotli, gzip, deflate, opt-in zstd)
+- `compressionStream(method | options?)` &nbsp;– stream middleware (gzip, deflate, opt-in brotli / zstd)
+- `compressResponse(event, value, method?, options?)` &nbsp;– low-level helper returning a compressed `Response`
 - `compressResponseStream(event, value, method?, options?)` &nbsp;– low-level stream helper returning a compressed `Response`
+- `isZstdSupported()` &nbsp;– whether the runtime can compress with zstd
 
 ## Sponsors
 

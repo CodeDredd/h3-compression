@@ -43,14 +43,29 @@ export async function useBrotliCompressionStream(
 }
 
 /**
+ * Compresses the response with [zlib.createZstdCompress]{@link https://nodejs.org/api/zlib.html}
+ * piped as a stream. The native `CompressionStream` has no zstd format, so this
+ * one is backed by `node:zlib` and requires Node >= 22.15.0 — it throws a
+ * `TypeError` on older runtimes.
+ * @param event - A H3 event object.
+ * @param response - A response object with body parameter.
+ */
+export async function useZstdCompressionStream(
+  event: H3Event,
+  response: Partial<RenderResponse>,
+) {
+  await compressStream(event, response, 'zstd')
+}
+
+/**
  * Compresses the response with
  * [CompressionStream]{@link https://developer.mozilla.org/en-US/docs/Web/API/CompressionStream}
  * by 'Accept-Encoding' header. Best is used first.
  *
- * Brotli is only picked when enabled via `options.brotli`.
+ * Zstd and brotli are only picked when enabled via `options`.
  * @param event - A H3 event object.
  * @param response - A response object with body parameter.
- * @param options - Opt into brotli detection with `{ brotli: true }`.
+ * @param options - Opt into zstd / brotli detection, e.g. `{ brotli: true }`.
  */
 export async function useCompressionStream(
   event: H3Event,

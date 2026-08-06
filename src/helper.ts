@@ -2,6 +2,7 @@ import { promisify } from 'node:util'
 import zlib from 'node:zlib'
 import { Buffer } from 'node:buffer'
 import { Duplex } from 'node:stream'
+import process from 'node:process'
 import type { H3Event } from 'h3'
 import * as h3 from 'h3'
 
@@ -14,10 +15,22 @@ export interface RenderResponse {
   headers: Record<string, string>
 }
 
-export type Compression = 'gzip' | 'deflate' | 'br'
-export type StreamCompression = 'gzip' | 'deflate' | 'br'
+export type Compression = 'gzip' | 'deflate' | 'br' | 'zstd'
+export type StreamCompression = 'gzip' | 'deflate' | 'br' | 'zstd'
 
-export interface StreamCompressionOptions {
+export interface CompressionOptions {
+  /**
+   * Consider zstd when picking a compression from the `Accept-Encoding`
+   * header. Off by default: `node:zlib` only gained zstd in Node 22.15, so
+   * enabling it by default would make the negotiated encoding depend on the
+   * runtime version. The flag is ignored when the runtime has no zstd — the
+   * next accepted encoding is used instead. See {@link isZstdSupported}.
+   * @default false
+   */
+  zstd?: boolean
+}
+
+export interface StreamCompressionOptions extends CompressionOptions {
   /**
    * Consider brotli when picking a compression from the `Accept-Encoding`
    * header. Off by default because brotli is noticeably more CPU-expensive
@@ -25,6 +38,25 @@ export interface StreamCompressionOptions {
    * @default false
    */
   brotli?: boolean
+}
+
+/**
+ * Whether the current runtime can compress with zstd. `node:zlib` gained the
+ * zstd bindings in Node 22.15.0 / 23.8.0; on anything older this is `false`
+ * and zstd is skipped during `Accept-Encoding` negotiation.
+ * @returns { boolean }
+ */
+export function isZstdSupported(): boolean {
+  return typeof zlib.createZstdCompress === 'function'
+}
+
+function ensureZstdSupported(): void {
+  if (!isZstdSupported()) {
+    throw new TypeError(
+      'zstd compression requires Node >= 22.15.0 (or >= 23.8.0), which is when `node:zlib` gained zstd support. '
+      + `This runtime is ${process.version}. Use \`isZstdSupported()\` to branch, or the \`zstd\` option to fall back automatically.`,
+    )
+  }
 }
 
 /**
@@ -43,12 +75,21 @@ const toResponse = h3Export<(val: unknown, event: H3Event) => Response | Promise
 
 /**
  * Returns the best compression accepted by the client via the
- * `Accept-Encoding` header. Brotli is preferred, then gzip, then deflate.
+ * `Accept-Encoding` header. Zstd is preferred when enabled via
+ * `options.zstd` and supported by the runtime, then brotli, then gzip,
+ * then deflate.
  * @param { H3Event } event - A H3 event object.
+ * @param { CompressionOptions } [options] - Opt into zstd detection.
  * @returns { Compression | undefined }
  */
-export function getAnyCompression(event: H3Event): Compression | undefined {
+export function getAnyCompression(
+  event: H3Event,
+  options: CompressionOptions = {},
+): Compression | undefined {
   const encoding = getRequestHeader(event, 'accept-encoding')
+  if (options.zstd && isZstdSupported() && encoding?.includes('zstd'))
+    return 'zstd'
+
   if (encoding?.includes('br'))
     return 'br'
 
@@ -62,11 +103,11 @@ export function getAnyCompression(event: H3Event): Compression | undefined {
 }
 
 /**
- * Returns the best stream compression accepted by the client. Brotli is only
- * considered when it is enabled via `options.brotli`, otherwise gzip is
- * preferred, then deflate.
+ * Returns the best stream compression accepted by the client. Zstd and brotli
+ * are only considered when enabled via `options`, otherwise gzip is preferred,
+ * then deflate.
  * @param { H3Event } event - A H3 event object.
- * @param { StreamCompressionOptions } [options] - Opt into brotli detection.
+ * @param { StreamCompressionOptions } [options] - Opt into zstd / brotli detection.
  * @returns { StreamCompression | undefined }
  */
 export function getStreamCompression(
@@ -74,6 +115,9 @@ export function getStreamCompression(
   options: StreamCompressionOptions = {},
 ): StreamCompression | undefined {
   const encoding = getRequestHeader(event, 'accept-encoding')
+  if (options.zstd && isZstdSupported() && encoding?.includes('zstd'))
+    return 'zstd'
+
   if (options.brotli && encoding?.includes('br'))
     return 'br'
 
@@ -90,20 +134,47 @@ export function getStreamCompression(
  * Creates the transform used to compress a response body stream.
  *
  * The native `CompressionStream` implements the WHATWG `CompressionFormat`
- * enum, which only defines gzip, deflate and deflate-raw — brotli is therefore
- * streamed through `node:zlib` instead. `BROTLI_OPERATION_FLUSH` is required
- * to keep the output chunked; with zlib's defaults brotli buffers the whole
- * body until the source closes, which defeats the point of a stream.
+ * enum, which only defines gzip, deflate and deflate-raw — brotli and zstd are
+ * therefore streamed through `node:zlib` instead. The explicit flush mode is
+ * required to keep the output chunked; with zlib's defaults both buffer the
+ * whole body until the source closes, which defeats the point of a stream.
  * @param { StreamCompression } method - The compression to apply.
  * @returns { ReadableWritablePair<Uint8Array, Uint8Array> }
  */
 function createCompressionTransform(method: StreamCompression): ReadableWritablePair<Uint8Array, Uint8Array> {
-  if (method !== 'br')
-    return new CompressionStream(method)
+  if (method === 'br') {
+    return Duplex.toWeb(zlib.createBrotliCompress({
+      flush: zlib.constants.BROTLI_OPERATION_FLUSH,
+    })) as unknown as ReadableWritablePair<Uint8Array, Uint8Array>
+  }
 
-  return Duplex.toWeb(zlib.createBrotliCompress({
-    flush: zlib.constants.BROTLI_OPERATION_FLUSH,
-  })) as unknown as ReadableWritablePair<Uint8Array, Uint8Array>
+  if (method === 'zstd') {
+    ensureZstdSupported()
+    return Duplex.toWeb(zlib.createZstdCompress({
+      flush: zlib.constants.ZSTD_e_flush,
+    })) as unknown as ReadableWritablePair<Uint8Array, Uint8Array>
+  }
+
+  return new CompressionStream(method)
+}
+
+/**
+ * Returns the buffered (one-shot) compressor for a method.
+ * @param { Compression } method - The compression to apply.
+ * @returns { (payload: Uint8Array) => Promise<Buffer> }
+ */
+function createCompressor(method: Compression): (payload: Uint8Array) => Promise<Buffer> {
+  if (method === 'zstd')
+    ensureZstdSupported()
+
+  const compressors = {
+    br: 'brotliCompress',
+    zstd: 'zstdCompress',
+    gzip: 'gzip',
+    deflate: 'deflate',
+  } as const
+
+  return promisify(zlib[compressors[method]]) as (payload: Uint8Array) => Promise<Buffer>
 }
 
 function isReadableStream(value: unknown): boolean {
@@ -154,7 +225,7 @@ export async function compress(event: H3Event, response: Partial<RenderResponse>
   if (!payload)
     return
 
-  const compression = promisify(zlib[method === 'br' ? 'brotliCompress' : method])
+  const compression = createCompressor(method)
   setResponseHeader(event, 'Content-Encoding', method)
   const compressed = await compression(payload)
   // h3 v1 streams the body via `send`, h3 v2 expects the (mutated) body.
@@ -208,11 +279,17 @@ function cloneResponse(response: Response, body: BodyInit, method: string): Resp
  * @param { H3Event } event - A H3 event object.
  * @param { unknown } value - The value returned by the next handler.
  * @param { Compression } [method] - Force a specific compression method.
+ * @param { CompressionOptions } [options] - Opt into zstd detection.
  * @returns { Promise<Response> }
  */
-export async function compressResponse(event: H3Event, value: unknown, method?: Compression): Promise<Response> {
+export async function compressResponse(
+  event: H3Event,
+  value: unknown,
+  method?: Compression,
+  options?: CompressionOptions,
+): Promise<Response> {
   const response = await ensureToResponse()(value, event)
-  const compressionMethod = method ?? getAnyCompression(event)
+  const compressionMethod = method ?? getAnyCompression(event, options)
 
   if (!compressionMethod || response.headers.has('Content-Encoding'))
     return response
@@ -221,7 +298,7 @@ export async function compressResponse(event: H3Event, value: unknown, method?: 
   if (body.byteLength === 0)
     return response
 
-  const compression = promisify(zlib[compressionMethod === 'br' ? 'brotliCompress' : compressionMethod])
+  const compression = createCompressor(compressionMethod)
 
   return cloneResponse(response, await compression(body), compressionMethod)
 }
