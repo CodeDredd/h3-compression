@@ -6,7 +6,10 @@
     "dev": "nuxt dev",
     "generate": "nuxt generate",
     "preview": "nuxt preview",
-    "postinstall": "nuxt prepare"
+    "nuxt:prepare": "nuxt prepare"
+  },
+  "dependencies": {
+    "h3-compression": "workspace:*"
   },
   "devDependencies": {
     "@nuxt/devtools": "^0.8.2",

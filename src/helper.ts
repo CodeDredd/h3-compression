@@ -28,6 +28,18 @@ export interface CompressionOptions {
    * @default false
    */
   zstd?: boolean
+
+  /**
+   * Skip compression for bodies smaller than this many bytes. Small payloads
+   * usually get *larger* once framing overhead is added, so compressing a
+   * 40-byte JSON response is a pure loss. Measured on the serialized body, so
+   * it applies to object bodies too.
+   *
+   * Only applies to the buffered (zlib) path — a stream's size is not known
+   * up front.
+   * @default 0
+   */
+  minSize?: number
 }
 
 export interface StreamCompressionOptions extends CompressionOptions {
@@ -214,7 +226,12 @@ function toCompressibleBuffer(event: H3Event, body: unknown): Buffer | undefined
   }
 }
 
-export async function compress(event: H3Event, response: Partial<RenderResponse>, method: Compression) {
+export async function compress(
+  event: H3Event,
+  response: Partial<RenderResponse>,
+  method: Compression,
+  options: CompressionOptions = {},
+) {
   const acceptsEncoding = getRequestHeader(event, 'accept-encoding')?.includes(
     method,
   )
@@ -222,7 +239,7 @@ export async function compress(event: H3Event, response: Partial<RenderResponse>
     return
 
   const payload = toCompressibleBuffer(event, response.body)
-  if (!payload)
+  if (!payload || payload.byteLength < (options.minSize ?? 0))
     return
 
   const compression = createCompressor(method)
@@ -260,11 +277,23 @@ function ensureToResponse(): NonNullable<typeof toResponse> {
   return toResponse
 }
 
-function cloneResponse(response: Response, body: BodyInit, method: string): Response {
+/**
+ * Rebuilds a `Response` around a new body. Reading `response.arrayBuffer()`
+ * consumes the original, so even the "not compressed after all" paths have to
+ * go through here rather than returning the drained original.
+ * @param { Response } response - The response to copy status and headers from.
+ * @param { BodyInit } body - The replacement body.
+ * @param { string } [method] - Content-Encoding to set; omitted for a plain passthrough.
+ * @returns { Response }
+ */
+function cloneResponse(response: Response, body: BodyInit, method?: string): Response {
   const headers = new Headers(response.headers)
-  headers.set('Content-Encoding', method)
-  // The length changes after compression, let the runtime recompute it.
-  headers.delete('Content-Length')
+
+  if (method) {
+    headers.set('Content-Encoding', method)
+    // The length changes after compression, let the runtime recompute it.
+    headers.delete('Content-Length')
+  }
 
   return new Response(body, {
     status: response.status,
@@ -295,8 +324,8 @@ export async function compressResponse(
     return response
 
   const body = new Uint8Array(await response.arrayBuffer())
-  if (body.byteLength === 0)
-    return response
+  if (body.byteLength === 0 || body.byteLength < (options?.minSize ?? 0))
+    return cloneResponse(response, body)
 
   const compression = createCompressor(compressionMethod)
 
