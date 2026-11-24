@@ -18,10 +18,13 @@ jobs:
       - name: Install pnpm
         uses: pnpm/action-setup@v2
 
+      # Lint tooling only — the test matrix below still covers the Node 20
+      # runtime floor. `@antfu/eslint-config` (via eslint-plugin-unicorn)
+      # relies on `Set.prototype.union`, which needs Node 22.
       - name: Set node
         uses: actions/setup-node@v3
         with:
-          node-version: 20.x
+          node-version: 24.x
 
       - name: Setup
         run: npm i -g @antfu/ni
