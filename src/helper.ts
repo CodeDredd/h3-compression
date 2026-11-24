@@ -1,7 +1,7 @@
 import { promisify } from 'node:util'
 import zlib from 'node:zlib'
 import { Buffer } from 'node:buffer'
-import { Duplex } from 'node:stream'
+import { Duplex, Readable } from 'node:stream'
 import process from 'node:process'
 import type { H3Event } from 'h3'
 import * as h3 from 'h3'
@@ -280,9 +280,19 @@ function createCompressor(method: Compression): (payload: Uint8Array) => Promise
   return promisify(zlib[compressors[method]]) as (payload: Uint8Array) => Promise<Buffer>
 }
 
-function isReadableStream(value: unknown): boolean {
+function isReadableStream(value: unknown): value is ReadableStream {
   return typeof value === 'object' && value !== null
     && typeof (value as ReadableStream).getReader === 'function'
+}
+
+function isNodeStream(value: unknown): value is Readable {
+  return typeof value === 'object' && value !== null
+    && typeof (value as Readable).pipe === 'function'
+    && typeof (value as Readable).on === 'function'
+}
+
+function isBlob(value: unknown): value is Blob {
+  return typeof Blob !== 'undefined' && value instanceof Blob
 }
 
 /**
@@ -301,14 +311,46 @@ function isEmptyBody(body: unknown): boolean {
 }
 
 /**
+ * Whether h3 would send a body as JSON: objects and arrays (e.g. returned from
+ * a `/server/api` route), numbers and booleans. Streams, `Blob`s, `Response`s
+ * and errors are not — serializing those would replace the payload with
+ * their internal state (`{"_events":…}`) or `{}`.
+ */
+function isJsonBody(body: unknown): boolean {
+  if (typeof body === 'number' || typeof body === 'boolean')
+    return true
+
+  if (typeof body !== 'object' || body === null || body instanceof Error)
+    return false
+
+  const value = body as Record<string, unknown>
+  return typeof value.getReader !== 'function'
+    && typeof value.pipe !== 'function'
+    && typeof value.arrayBuffer !== 'function'
+}
+
+/**
+ * Serializes a JSON body. `undefined` when it can't be (circular, or a value
+ * `JSON.stringify` drops).
+ */
+function serializeJson(body: unknown): string | undefined {
+  try {
+    return JSON.stringify(body)
+  }
+  catch {
+    return undefined
+  }
+}
+
+/**
  * Turns a response body into a buffer that can be compressed. Strings, buffers
- * and typed arrays are used as-is; plain JSON-serializable values (e.g. objects
- * returned from a `/server/api` route) are serialized to JSON and flagged so
- * the caller can set the content type. Returns `undefined` for bodies that
- * can't / shouldn't be buffered (streams, empty).
+ * and typed arrays are used as-is; JSON bodies (see {@link isJsonBody}) are
+ * serialized and flagged so the caller can set the content type. Returns
+ * `undefined` for bodies that can't / shouldn't be buffered (streams, blobs,
+ * responses, empty).
  */
 function toCompressibleBuffer(body: unknown): { payload: Buffer; json: boolean } | undefined {
-  if (isEmptyBody(body) || isReadableStream(body))
+  if (isEmptyBody(body))
     return undefined
 
   if (typeof body === 'string')
@@ -320,15 +362,41 @@ function toCompressibleBuffer(body: unknown): { payload: Buffer; json: boolean }
   if (body instanceof ArrayBuffer)
     return { payload: Buffer.from(body), json: false }
 
-  try {
-    const json = JSON.stringify(body)
-    if (json === undefined)
-      return undefined
-    return { payload: Buffer.from(json), json: true }
-  }
-  catch {
+  if (!isJsonBody(body))
     return undefined
-  }
+
+  const json = serializeJson(body)
+  return json === undefined ? undefined : { payload: Buffer.from(json), json: true }
+}
+
+/**
+ * Prepares a response body for the stream path. Web and node streams, blobs,
+ * strings and bytes are streamed as they are; JSON bodies are serialized
+ * first (a plain `new Response(object)` would send `[object Object]`).
+ * Anything else — e.g. a `Response` returned on h3 v1 — is left alone.
+ *
+ * Streams are only opened once the body is actually compressed: `Readable.toWeb`
+ * starts consuming the node stream, so the "not compressed" path must not
+ * touch it.
+ */
+function toStreamSource(body: unknown): { open: () => ReadableStream; json: boolean } | undefined {
+  if (isEmptyBody(body))
+    return undefined
+
+  if (isReadableStream(body))
+    return { open: () => body, json: false }
+
+  if (isNodeStream(body))
+    return { open: () => Readable.toWeb(body) as unknown as ReadableStream, json: false }
+
+  if (typeof body === 'string' || body instanceof Uint8Array || body instanceof ArrayBuffer || isBlob(body))
+    return { open: () => new Response(body as BodyInit).body as ReadableStream, json: false }
+
+  if (!isJsonBody(body))
+    return undefined
+
+  const json = serializeJson(body)
+  return json === undefined ? undefined : { open: () => new Response(json).body as ReadableStream, json: true }
 }
 
 /**
@@ -509,7 +577,8 @@ export async function compress(
  *
  * Nothing happens for empty or already-encoded bodies. Otherwise
  * `Vary: Accept-Encoding` is set, and the body is compressed if the client
- * accepts the coding.
+ * accepts the coding. JSON bodies are serialized first, and web / node
+ * streams, blobs, strings and bytes are streamed as they are.
  * @param { H3Event } event - A H3 event object.
  * @param { Partial<RenderResponse> } response - A response object with body parameter.
  * @param { StreamCompression } [method] - The coding to apply, if the client accepts it. Negotiated from `Accept-Encoding` when omitted.
@@ -522,7 +591,11 @@ export async function compressStream(
   method?: StreamCompression,
   options: StreamCompressionOptions = {},
 ): Promise<void> {
-  if (isEmptyBody(response.body) || isEncoded(event, response))
+  if (isEncoded(event, response))
+    return
+
+  const source = toStreamSource(response.body)
+  if (!source)
     return
 
   varyOnAcceptEncoding(event, response)
@@ -533,9 +606,12 @@ export async function compressStream(
   if (!encoding)
     return
 
-  const stream = new Response(response.body as string).body as ReadableStream
+  // Mirror h3, which serializes objects as JSON.
+  if (source.json)
+    setResponseHeader(event, 'Content-Type', 'application/json')
+
   setEncoding(event, response, encoding)
-  response.body = stream.pipeThrough(createCompressionTransform(encoding))
+  response.body = source.open().pipeThrough(createCompressionTransform(encoding))
 }
 
 function ensureToResponse(): NonNullable<typeof toResponse> {
