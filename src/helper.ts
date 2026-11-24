@@ -262,15 +262,18 @@ function createCompressionTransform(method: StreamCompression): ReadableWritable
     })) as unknown as ReadableWritablePair<Uint8Array, Uint8Array>
   }
 
-  return new CompressionStream(method)
+  // The DOM lib types `CompressionStream` as `BufferSource` in and
+  // `Uint8Array<ArrayBuffer>` out; at runtime it is the same byte pair.
+  return new CompressionStream(method) as unknown as ReadableWritablePair<Uint8Array, Uint8Array>
 }
 
 /**
- * Returns the buffered (one-shot) compressor for a method.
+ * Returns the buffered (one-shot) compressor for a method. Its result is
+ * always backed by a plain `ArrayBuffer`, so it can be used as a `BodyInit`.
  * @param { Compression } method - The compression to apply.
- * @returns { (payload: Uint8Array) => Promise<Buffer> }
+ * @returns { (payload: Uint8Array) => Promise<Buffer<ArrayBuffer>> }
  */
-function createCompressor(method: Compression): (payload: Uint8Array) => Promise<Buffer> {
+function createCompressor(method: Compression): (payload: Uint8Array) => Promise<Buffer<ArrayBuffer>> {
   if (method === 'zstd')
     ensureZstdSupported()
 
@@ -281,7 +284,7 @@ function createCompressor(method: Compression): (payload: Uint8Array) => Promise
     deflate: 'deflate',
   } as const
 
-  return promisify(zlib[compressors[method]]) as (payload: Uint8Array) => Promise<Buffer>
+  return promisify(zlib[compressors[method]]) as (payload: Uint8Array) => Promise<Buffer<ArrayBuffer>>
 }
 
 function isReadableStream(value: unknown): value is ReadableStream {

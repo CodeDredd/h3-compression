@@ -1,4 +1,4 @@
-import type { SuperTest, Test } from 'supertest'
+import type { Test, TestAgent } from 'supertest'
 import { Buffer } from 'node:buffer'
 import zlib from 'node:zlib'
 import * as h3 from 'h3'
@@ -156,7 +156,7 @@ describe.runIf(isV2 && hasZstd)('zstd compression (#7)', () => {
 })
 
 describe.runIf(isV2 && hasZstd)('zstd middleware (#7)', () => {
-  function appWith(middleware: ReturnType<typeof compression>): SuperTest<Test> {
+  function appWith(middleware: ReturnType<typeof compression>): TestAgent<Test> {
     const app = new H3()
     app.use(middleware)
     app.get('/', () => html)

@@ -1,4 +1,4 @@
-import type { SuperTest, Test } from 'supertest'
+import type { Test, TestAgent } from 'supertest'
 import { Buffer } from 'node:buffer'
 import zlib from 'node:zlib'
 import * as h3 from 'h3'
@@ -11,7 +11,8 @@ import { isV1 } from './_version'
 // `node:zlib` gained zstd in Node 22.15.0 / 23.8.0.
 const hasZstd = isZstdSupported()
 
-// superagent does not auto-decode brotli, so read the raw bytes ourselves.
+// superagent decodes gzip, deflate and brotli itself, but not zstd — read
+// zstd responses as raw bytes.
 function rawParser(res: any, cb: (err: Error | null, body: Buffer) => void) {
   const chunks: Buffer[] = []
   res.on('data', (c: Buffer) => chunks.push(c))
@@ -41,7 +42,7 @@ function jsonAppWith(hook: typeof useCompression) {
 }
 
 describe.runIf(isV1)('useCompression (h3 v1 app hook)', () => {
-  let request: SuperTest<Test>
+  let request: TestAgent<Test>
 
   beforeEach(() => {
     request = appWith(useCompression)
@@ -89,18 +90,16 @@ describe.runIf(isV1)('useCompression with JSON body (h3 v1 app hook)', () => {
     const result = await request
       .get('/api')
       .set('Accept-Encoding', 'br')
-      .buffer(true)
-      .parse(rawParser)
 
     expect(result.status).toEqual(200)
     expect(result.headers['content-encoding']).toEqual('br')
     expect(result.headers['content-type']).toContain('application/json')
-    expect(JSON.parse(zlib.brotliDecompressSync(result.body).toString())).toEqual(json)
+    expect(result.body).toEqual(json)
   })
 })
 
 describe.runIf(isV1)('useCompressionStream (h3 v1 app hook)', () => {
-  let request: SuperTest<Test>
+  let request: TestAgent<Test>
 
   beforeEach(() => {
     request = appWith(useCompressionStream)
@@ -137,12 +136,10 @@ describe.runIf(isV1)('useCompressionStream (h3 v1 app hook)', () => {
     const result = await brotliRequest
       .get('/')
       .set('Accept-Encoding', 'br, gzip')
-      .buffer(true)
-      .parse(rawParser)
 
     expect(result.status).toEqual(200)
     expect(result.headers['content-encoding']).toEqual('br')
-    expect(zlib.brotliDecompressSync(result.body).toString()).toEqual(html)
+    expect(result.text).toEqual(html)
   })
 })
 

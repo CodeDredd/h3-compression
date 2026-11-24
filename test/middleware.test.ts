@@ -1,18 +1,9 @@
-import type { SuperTest, Test } from 'supertest'
-import { Buffer } from 'node:buffer'
-import zlib from 'node:zlib'
+import type { Test, TestAgent } from 'supertest'
 import * as h3 from 'h3'
 import supertest from 'supertest'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { compression, compressionStream } from '../src'
 import { isV2 } from './_version'
-
-// superagent does not auto-decode brotli, so read the raw bytes ourselves.
-function rawParser(res: any, cb: (err: Error | null, body: Buffer) => void) {
-  const chunks: Buffer[] = []
-  res.on('data', (c: Buffer) => chunks.push(c))
-  res.on('end', () => cb(null, Buffer.concat(chunks)))
-}
 
 // `H3` and `toNodeHandler` only exist in h3 v2 — access them lazily so this
 // file still loads (but is skipped) under h3 v1.
@@ -21,7 +12,7 @@ const { H3, toNodeHandler } = h3 as typeof import('h3')
 const html = '<h1>Hello World</h1>'
 
 describe.runIf(isV2)('compression middleware (h3 v2)', () => {
-  let request: SuperTest<Test>
+  let request: TestAgent<Test>
 
   beforeEach(() => {
     const app = new H3()
@@ -47,11 +38,11 @@ describe.runIf(isV2)('compression middleware (h3 v2)', () => {
   })
 
   it('returns 200 OK with brotli compression', async () => {
-    // supertest/superagent does not auto-decode brotli, so only the header is asserted here.
     const result = await request.get('/').set('Accept-Encoding', 'br')
 
     expect(result.status).toEqual(200)
     expect(result.headers['content-encoding']).toEqual('br')
+    expect(result.text).toEqual(html)
   })
 
   it('does not compress when no supported encoding is accepted', async () => {
@@ -64,7 +55,7 @@ describe.runIf(isV2)('compression middleware (h3 v2)', () => {
 })
 
 describe.runIf(isV2)('compressionStream middleware (h3 v2)', () => {
-  let request: SuperTest<Test>
+  let request: TestAgent<Test>
 
   beforeEach(() => {
     const app = new H3()
@@ -118,24 +109,20 @@ describe.runIf(isV2)('compressionStream middleware with brotli (h3 v2, #19)', ()
     const result = await appWith({ brotli: true })
       .get('/')
       .set('Accept-Encoding', 'br, gzip')
-      .buffer()
-      .parse(rawParser)
 
     expect(result.status).toEqual(200)
     expect(result.headers['content-encoding']).toEqual('br')
-    expect(zlib.brotliDecompressSync(result.body).toString()).toEqual(html)
+    expect(result.text).toEqual(html)
   })
 
   it('forces brotli without the flag when passed as a method', async () => {
     const result = await appWith('br')
       .get('/')
       .set('Accept-Encoding', 'br')
-      .buffer()
-      .parse(rawParser)
 
     expect(result.status).toEqual(200)
     expect(result.headers['content-encoding']).toEqual('br')
-    expect(zlib.brotliDecompressSync(result.body).toString()).toEqual(html)
+    expect(result.text).toEqual(html)
   })
 
   it('falls back to gzip when brotli is enabled but not accepted', async () => {

@@ -9,34 +9,41 @@ on:
     branches:
       - main
 
+permissions:
+  contents: read
+
 jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v7
 
+      # Reads the version from `packageManager` in package.json.
       - name: Install pnpm
-        uses: pnpm/action-setup@v2
+        uses: pnpm/action-setup@v6
 
       # Lint tooling only — the test matrix below still covers the Node 20
       # runtime floor. `@antfu/eslint-config` (via eslint-plugin-unicorn)
       # relies on `Set.prototype.union`, which needs Node 22.
       - name: Set node
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v7
         with:
           node-version: 24.x
-
-      - name: Setup
-        run: npm i -g @antfu/ni
+          cache: pnpm
 
       - name: Install
-        run: nci
+        run: pnpm install --frozen-lockfile
 
       - name: Lint
-        run: nr lint
+        run: pnpm lint
 
   test:
     runs-on: ${{ matrix.os }}
+
+    # Codecov authenticates the upload via GitHub OIDC instead of a token.
+    permissions:
+      contents: read
+      id-token: write
 
     strategy:
       matrix:
@@ -51,18 +58,27 @@ jobs:
     name: test (node-${{ matrix.node }}, h3-v${{ matrix.h3 }}, ${{ matrix.os }})
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - run: corepack enable
-      - uses: actions/setup-node@v3
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ matrix.node }}
           cache: pnpm
-      - run: pnpm install
+
+      - run: pnpm install --frozen-lockfile
+
       - name: Install h3 v${{ matrix.h3 }}
         run: pnpm add -D h3@${{ matrix.h3 == 1 && '^1.15.11' || '^2.0.8' }} --ignore-scripts
+
       - run: pnpm build
-      #      - run: pnpm test:types
-      - run: pnpm vitest --coverage && rm -rf coverage/tmp
-      - uses: codecov/codecov-action@v3
+
+      - run: pnpm vitest run --coverage && rm -rf coverage/tmp
+
+      - uses: codecov/codecov-action@v7
+        with:
+          use_oidc: true

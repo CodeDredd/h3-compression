@@ -1,7 +1,29 @@
+ignoreWorkspaceRootCheck: true
+
 minimumReleaseAgeExcludePrune: true
+minimumReleaseAgeExclude:
+  - '@nuxt/kit@4.7.0'
+  - '@nuxt/nitro-server@4.7.0'
+  - '@nuxt/nitro-v3-server@4.7.0'
+  - '@nuxt/schema@4.7.0'
+  - '@nuxt/vite-builder@4.7.0'
+  - '@nuxt/vite-server@4.7.0'
+  - nitropack@2.14.0
+  - nuxt@4.7.0
+
 trustPolicy: no-downgrade
+trustPolicyExclude:
+  # Published without provenance after earlier releases had it; it is the
+  # Node.js team's own type package, pulled in by @types/node 22.
+  - undici-types@6.21.0
+
 shellEmulator: true
 
 packages:
   - playground
   - examples/*
+
+allowBuilds:
+  esbuild: true
+  # The hooks are installed by this package's own `prepare` script.
+  simple-git-hooks: false
