@@ -6,7 +6,7 @@ import process from 'node:process'
 import type { H3Event } from 'h3'
 import * as h3 from 'h3'
 
-const { getRequestHeader, setResponseHeader } = h3
+const { getRequestHeader, getResponseHeader, setResponseHeader } = h3
 
 export interface RenderResponse {
   body: string | unknown
@@ -84,6 +84,8 @@ function h3Export<T>(name: string): T | undefined {
 
 const send = h3Export<(event: H3Event, data?: unknown) => unknown>('send')
 const toResponse = h3Export<(val: unknown, event: H3Event) => Response | Promise<Response>>('toResponse')
+// Only added in h3 1.8 — older v1 releases inside the peer range lack it.
+const removeResponseHeader = h3Export<(event: H3Event, name: string) => void>('removeResponseHeader')
 
 /**
  * Returns the best compression accepted by the client via the
@@ -226,6 +228,82 @@ function toCompressibleBuffer(event: H3Event, body: unknown): Buffer | undefined
   }
 }
 
+/**
+ * Finds the key of a header in a plain header record, ignoring case.
+ */
+function findHeaderKey(headers: Record<string, unknown>, name: string): string | undefined {
+  return Object.keys(headers).find(key => key.toLowerCase() === name)
+}
+
+/**
+ * Reads a response header from the header record a Nitro `render:response`
+ * hook hands over (Nitro only applies it to the event after the hook ran),
+ * falling back to the headers already set on the event.
+ * @param { H3Event } event - A H3 event object.
+ * @param { Partial<RenderResponse> } response - The response object handed over by the hook.
+ * @param { string } name - The lowercase header name.
+ * @returns { string | undefined }
+ */
+function getHeader(event: H3Event, response: Partial<RenderResponse>, name: string): string | undefined {
+  const headers = response.headers
+  if (headers && typeof headers === 'object') {
+    const key = findHeaderKey(headers, name)
+    if (key !== undefined && headers[key] != null)
+      return String(headers[key])
+  }
+
+  const value = getResponseHeader(event, name)
+  return value == null ? undefined : String(value)
+}
+
+/**
+ * Removes a response header from both the hook's header record and the event.
+ * @param { H3Event } event - A H3 event object.
+ * @param { Partial<RenderResponse> } response - The response object handed over by the hook.
+ * @param { string } name - The lowercase header name.
+ */
+function removeHeader(event: H3Event, response: Partial<RenderResponse>, name: string): void {
+  const headers = response.headers
+  if (headers && typeof headers === 'object') {
+    const key = findHeaderKey(headers, name)
+    if (key !== undefined)
+      delete headers[key]
+  }
+
+  if (typeof removeResponseHeader === 'function')
+    removeResponseHeader(event, name)
+  else
+    (event as unknown as { node?: { res?: { removeHeader?: (name: string) => void } } }).node?.res?.removeHeader?.(name)
+}
+
+/**
+ * Whether the response body is already content-encoded, e.g. a pre-compressed
+ * `.br` / `.gz` asset served by Nitro's static handler with
+ * `compressPublicAssets`. Compressing it again would produce a body the client
+ * can only decode once — leaving it with compressed bytes instead of the asset.
+ * @param { H3Event } event - A H3 event object.
+ * @param { Partial<RenderResponse> } response - The response object handed over by the hook.
+ * @returns { boolean }
+ */
+function isEncoded(event: H3Event, response: Partial<RenderResponse>): boolean {
+  const encoding = getHeader(event, response, 'content-encoding')?.trim().toLowerCase()
+  return !!encoding && encoding !== 'identity'
+}
+
+/**
+ * Marks the response as encoded with `method`. The `Content-Length` of the
+ * uncompressed body no longer matches the bytes on the wire, which breaks
+ * the HTTP framing (clients read into the next response on keep-alive), so
+ * it is dropped and left for the runtime to recompute.
+ * @param { H3Event } event - A H3 event object.
+ * @param { Partial<RenderResponse> } response - The response object handed over by the hook.
+ * @param { string } method - The applied content-encoding.
+ */
+function setEncoding(event: H3Event, response: Partial<RenderResponse>, method: string): void {
+  removeHeader(event, response, 'content-length')
+  setResponseHeader(event, 'Content-Encoding', method)
+}
+
 export async function compress(
   event: H3Event,
   response: Partial<RenderResponse>,
@@ -235,7 +313,7 @@ export async function compress(
   const acceptsEncoding = getRequestHeader(event, 'accept-encoding')?.includes(
     method,
   )
-  if (!acceptsEncoding)
+  if (!acceptsEncoding || isEncoded(event, response))
     return
 
   const payload = toCompressibleBuffer(event, response.body)
@@ -243,7 +321,7 @@ export async function compress(
     return
 
   const compression = createCompressor(method)
-  setResponseHeader(event, 'Content-Encoding', method)
+  setEncoding(event, response, method)
   const compressed = await compression(payload)
   // h3 v1 streams the body via `send`, h3 v2 expects the (mutated) body.
   if (typeof send === 'function')
@@ -253,13 +331,16 @@ export async function compress(
 }
 
 export async function compressStream(event: H3Event, response: Partial<RenderResponse>, method: StreamCompression) {
+  if (isEncoded(event, response))
+    return
+
   const stream = new Response(response.body as string).body as ReadableStream
   const acceptsEncoding = getRequestHeader(event, 'accept-encoding')?.includes(
     method,
   )
 
   if (acceptsEncoding) {
-    setResponseHeader(event, 'Content-Encoding', method)
+    setEncoding(event, response, method)
     response.body = stream.pipeThrough(createCompressionTransform(method))
   }
   else {
