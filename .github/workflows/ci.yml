@@ -58,7 +58,7 @@ jobs:
           cache: pnpm
       - run: pnpm install
       - name: Install h3 v${{ matrix.h3 }}
-        run: pnpm add -D h3@${{ matrix.h3 == 1 && '^1.8.0' || '2.0.1-rc.22' }} --ignore-scripts
+        run: pnpm add -D h3@${{ matrix.h3 == 1 && '^1.15.11' || '^2.0.8' }} --ignore-scripts
       - run: pnpm build
       #      - run: pnpm test:types
       - run: pnpm vitest --coverage && rm -rf coverage/tmp
