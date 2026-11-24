@@ -88,10 +88,114 @@ const toResponse = h3Export<(val: unknown, event: H3Event) => Response | Promise
 const removeResponseHeader = h3Export<(event: H3Event, name: string) => void>('removeResponseHeader')
 
 /**
+ * RFC 9110 asks recipients to treat these legacy names as their modern
+ * equivalent (section 8.4.1.3).
+ */
+const CODING_ALIASES: Record<string, string> = { 'x-gzip': 'gzip' }
+
+/**
+ * Parses a quality value. A malformed one makes the coding unacceptable rather
+ * than silently promoting it to `q=1`.
+ */
+function parseQuality(value: string): number {
+  const quality = Number(value.trim())
+  return Number.isFinite(quality) ? Math.min(Math.max(quality, 0), 1) : 0
+}
+
+/**
+ * Parses an `Accept-Encoding` header into its content-codings and quality
+ * values ([RFC 9110, section 12.5.3](https://www.rfc-editor.org/rfc/rfc9110#section-12.5.3)).
+ * Codings are lowercased; a coding without `q` has quality 1.
+ * @param { string } header - The raw header value.
+ * @returns { Map<string, number> }
+ */
+function parseAcceptEncoding(header: string): Map<string, number> {
+  const accepted = new Map<string, number>()
+
+  for (const entry of header.split(',')) {
+    const [name, ...params] = entry.split(';')
+    const coding = name.trim().toLowerCase()
+    if (!coding)
+      continue
+
+    let quality = 1
+    for (const param of params) {
+      const [key, value = ''] = param.split('=')
+      if (key.trim().toLowerCase() === 'q') {
+        quality = parseQuality(value)
+        break
+      }
+    }
+
+    const normalized = CODING_ALIASES[coding] ?? coding
+    accepted.set(normalized, Math.max(quality, accepted.get(normalized) ?? 0))
+  }
+
+  return accepted
+}
+
+/**
+ * Reads and parses the request's `Accept-Encoding` header. A missing header
+ * yields `undefined`: the client did not ask for any coding, so nothing is
+ * compressed.
+ */
+function getAcceptedEncodings(event: H3Event): Map<string, number> | undefined {
+  const header = getRequestHeader(event, 'accept-encoding') as string | string[] | undefined
+  if (!header)
+    return undefined
+
+  return parseAcceptEncoding(Array.isArray(header) ? header.join(',') : header)
+}
+
+/**
+ * The quality the client assigned to a coding: its own entry if listed,
+ * otherwise the `*` wildcard (which covers every coding not listed), otherwise
+ * 0 — not acceptable.
+ */
+function qualityOf(accepted: Map<string, number>, coding: string): number {
+  return accepted.get(coding) ?? accepted.get('*') ?? 0
+}
+
+/**
+ * Whether the client accepts `method` with a quality above 0.
+ * @param { H3Event } event - A H3 event object.
+ * @param { string } method - The content-coding to check.
+ * @returns { boolean }
+ */
+function acceptsEncoding(event: H3Event, method: string): boolean {
+  const accepted = getAcceptedEncodings(event)
+  return !!accepted && qualityOf(accepted, method) > 0
+}
+
+/**
+ * Picks the coding with the highest client quality from `candidates`, which
+ * are listed in server preference order — that order breaks ties. Codings
+ * with quality 0 are never picked.
+ */
+function negotiate<T extends string>(event: H3Event, candidates: T[]): T | undefined {
+  const accepted = getAcceptedEncodings(event)
+  if (!accepted)
+    return undefined
+
+  let best: T | undefined
+  let bestQuality = 0
+  for (const candidate of candidates) {
+    const quality = qualityOf(accepted, candidate)
+    if (quality > bestQuality) {
+      best = candidate
+      bestQuality = quality
+    }
+  }
+
+  return best
+}
+
+/**
  * Returns the best compression accepted by the client via the
- * `Accept-Encoding` header. Zstd is preferred when enabled via
- * `options.zstd` and supported by the runtime, then brotli, then gzip,
- * then deflate.
+ * `Accept-Encoding` header. The client's quality values decide first
+ * (`q=0` rejects a coding); among equally weighted codings zstd is preferred
+ * when enabled via `options.zstd` and supported by the runtime, then brotli,
+ * then gzip, then deflate.
  * @param { H3Event } event - A H3 event object.
  * @param { CompressionOptions } [options] - Opt into zstd detection.
  * @returns { Compression | undefined }
@@ -100,26 +204,18 @@ export function getAnyCompression(
   event: H3Event,
   options: CompressionOptions = {},
 ): Compression | undefined {
-  const encoding = getRequestHeader(event, 'accept-encoding')
-  if (options.zstd && isZstdSupported() && encoding?.includes('zstd'))
-    return 'zstd'
+  const candidates: Compression[] = ['br', 'gzip', 'deflate']
+  if (options.zstd && isZstdSupported())
+    candidates.unshift('zstd')
 
-  if (encoding?.includes('br'))
-    return 'br'
-
-  if (encoding?.includes('gzip'))
-    return 'gzip'
-
-  if (encoding?.includes('deflate'))
-    return 'deflate'
-
-  return undefined
+  return negotiate(event, candidates)
 }
 
 /**
- * Returns the best stream compression accepted by the client. Zstd and brotli
- * are only considered when enabled via `options`, otherwise gzip is preferred,
- * then deflate.
+ * Returns the best stream compression accepted by the client. The client's
+ * quality values decide first (`q=0` rejects a coding). Zstd and brotli are
+ * only considered when enabled via `options`; among equally weighted codings
+ * zstd is preferred, then brotli, then gzip, then deflate.
  * @param { H3Event } event - A H3 event object.
  * @param { StreamCompressionOptions } [options] - Opt into zstd / brotli detection.
  * @returns { StreamCompression | undefined }
@@ -128,20 +224,13 @@ export function getStreamCompression(
   event: H3Event,
   options: StreamCompressionOptions = {},
 ): StreamCompression | undefined {
-  const encoding = getRequestHeader(event, 'accept-encoding')
-  if (options.zstd && isZstdSupported() && encoding?.includes('zstd'))
-    return 'zstd'
+  const candidates: StreamCompression[] = ['gzip', 'deflate']
+  if (options.brotli)
+    candidates.unshift('br')
+  if (options.zstd && isZstdSupported())
+    candidates.unshift('zstd')
 
-  if (options.brotli && encoding?.includes('br'))
-    return 'br'
-
-  if (encoding?.includes('gzip'))
-    return 'gzip'
-
-  if (encoding?.includes('deflate'))
-    return 'deflate'
-
-  return undefined
+  return negotiate(event, candidates)
 }
 
 /**
@@ -197,31 +286,45 @@ function isReadableStream(value: unknown): boolean {
 }
 
 /**
+ * Whether a hook response body carries no bytes at all. Empty bodies are never
+ * compressed — the encoding framing would only add bytes, and a
+ * `Content-Encoding` on a 204 / 304 is wrong.
+ */
+function isEmptyBody(body: unknown): boolean {
+  if (body === null || body === undefined || body === '')
+    return true
+
+  if (body instanceof Uint8Array || body instanceof ArrayBuffer)
+    return body.byteLength === 0
+
+  return false
+}
+
+/**
  * Turns a response body into a buffer that can be compressed. Strings, buffers
  * and typed arrays are used as-is; plain JSON-serializable values (e.g. objects
- * returned from a `/server/api` route) are serialized to JSON. Returns
- * `undefined` for bodies that can't / shouldn't be buffered (streams, empty).
+ * returned from a `/server/api` route) are serialized to JSON and flagged so
+ * the caller can set the content type. Returns `undefined` for bodies that
+ * can't / shouldn't be buffered (streams, empty).
  */
-function toCompressibleBuffer(event: H3Event, body: unknown): Buffer | undefined {
+function toCompressibleBuffer(body: unknown): { payload: Buffer; json: boolean } | undefined {
+  if (isEmptyBody(body) || isReadableStream(body))
+    return undefined
+
   if (typeof body === 'string')
-    return Buffer.from(body)
+    return { payload: Buffer.from(body), json: false }
 
   if (body instanceof Uint8Array)
-    return Buffer.from(body)
+    return { payload: Buffer.from(body), json: false }
 
   if (body instanceof ArrayBuffer)
-    return Buffer.from(body)
-
-  if (body === null || body === undefined || isReadableStream(body))
-    return undefined
+    return { payload: Buffer.from(body), json: false }
 
   try {
     const json = JSON.stringify(body)
     if (json === undefined)
       return undefined
-    // Mirror h3, which serializes objects as JSON.
-    setResponseHeader(event, 'Content-Type', 'application/json')
-    return Buffer.from(json)
+    return { payload: Buffer.from(json), json: true }
   }
   catch {
     return undefined
@@ -277,6 +380,15 @@ function removeHeader(event: H3Event, response: Partial<RenderResponse>, name: s
 }
 
 /**
+ * Whether a `Content-Encoding` value means the body is already encoded.
+ * `identity` (or nothing) means it is not.
+ */
+function isEncodedValue(encoding: string | null | undefined): boolean {
+  const value = encoding?.trim().toLowerCase()
+  return !!value && value !== 'identity'
+}
+
+/**
  * Whether the response body is already content-encoded, e.g. a pre-compressed
  * `.br` / `.gz` asset served by Nitro's static handler with
  * `compressPublicAssets`. Compressing it again would produce a body the client
@@ -286,8 +398,45 @@ function removeHeader(event: H3Event, response: Partial<RenderResponse>, name: s
  * @returns { boolean }
  */
 function isEncoded(event: H3Event, response: Partial<RenderResponse>): boolean {
-  const encoding = getHeader(event, response, 'content-encoding')?.trim().toLowerCase()
-  return !!encoding && encoding !== 'identity'
+  return isEncodedValue(getHeader(event, response, 'content-encoding'))
+}
+
+/**
+ * Adds `Accept-Encoding` to a `Vary` header value, keeping the values already
+ * there. Returned unchanged if it is already listed or the value is `*`.
+ * @param { string | null | undefined } vary - The current `Vary` value.
+ * @returns { string }
+ */
+function mergeVary(vary: string | null | undefined): string {
+  const values = (vary ?? '').split(',').map(value => value.trim()).filter(Boolean)
+  if (values.some(value => value === '*' || value.toLowerCase() === 'accept-encoding'))
+    return vary as string
+
+  return [...values, 'Accept-Encoding'].join(', ')
+}
+
+/**
+ * Marks the response as depending on `Accept-Encoding`, so shared caches and
+ * CDNs don't serve a body compressed for one client to a client that never
+ * asked for that encoding (RFC 9110, section 12.5.5). Applied whether or not
+ * this particular response ends up compressed — another `Accept-Encoding`
+ * would have changed the outcome either way.
+ *
+ * A `Vary` in the `render:response` header record is updated in place, because
+ * Nitro applies that record after the hook and would overwrite the event's.
+ * @param { H3Event } event - A H3 event object.
+ * @param { Partial<RenderResponse> } response - The response object handed over by the hook.
+ */
+function varyOnAcceptEncoding(event: H3Event, response: Partial<RenderResponse>): void {
+  const headers = response.headers
+  const key = headers && typeof headers === 'object' ? findHeaderKey(headers, 'vary') : undefined
+  if (headers && key !== undefined) {
+    headers[key] = mergeVary(headers[key] == null ? undefined : String(headers[key]))
+    return
+  }
+
+  const current = getResponseHeader(event, 'vary')
+  setResponseHeader(event, 'Vary', mergeVary(current == null ? undefined : String(current)))
 }
 
 /**
@@ -304,25 +453,49 @@ function setEncoding(event: H3Event, response: Partial<RenderResponse>, method: 
   setResponseHeader(event, 'Content-Encoding', method)
 }
 
+/**
+ * Compresses a buffered response body in place — the building block of
+ * {@link useCompression} and the Nuxt module, for hooks that hand over a
+ * mutable response (h3 v1 `onBeforeResponse`, Nitro `render:response` /
+ * `beforeResponse`).
+ *
+ * Nothing happens for empty, streamed or already-encoded bodies, nor below
+ * `options.minSize`. Otherwise `Vary: Accept-Encoding` is set, and the body is
+ * compressed if the client accepts the coding.
+ * @param { H3Event } event - A H3 event object.
+ * @param { Partial<RenderResponse> } response - A response object with body parameter.
+ * @param { Compression } [method] - The coding to apply, if the client accepts it. Negotiated from `Accept-Encoding` when omitted.
+ * @param { CompressionOptions } [options] - Opt into zstd detection, set a minimum size.
+ * @returns { Promise<void> }
+ */
 export async function compress(
   event: H3Event,
   response: Partial<RenderResponse>,
-  method: Compression,
+  method?: Compression,
   options: CompressionOptions = {},
-) {
-  const acceptsEncoding = getRequestHeader(event, 'accept-encoding')?.includes(
-    method,
-  )
-  if (!acceptsEncoding || isEncoded(event, response))
+): Promise<void> {
+  if (isEncoded(event, response))
     return
 
-  const payload = toCompressibleBuffer(event, response.body)
-  if (!payload || payload.byteLength < (options.minSize ?? 0))
+  const serialized = toCompressibleBuffer(response.body)
+  if (!serialized || serialized.payload.byteLength < (options.minSize ?? 0))
     return
 
-  const compression = createCompressor(method)
-  setEncoding(event, response, method)
-  const compressed = await compression(payload)
+  varyOnAcceptEncoding(event, response)
+
+  const encoding = method
+    ? (acceptsEncoding(event, method) ? method : undefined)
+    : getAnyCompression(event, options)
+  if (!encoding)
+    return
+
+  // Mirror h3, which serializes objects as JSON.
+  if (serialized.json)
+    setResponseHeader(event, 'Content-Type', 'application/json')
+
+  const compression = createCompressor(encoding)
+  setEncoding(event, response, encoding)
+  const compressed = await compression(serialized.payload)
   // h3 v1 streams the body via `send`, h3 v2 expects the (mutated) body.
   if (typeof send === 'function')
     send(event, compressed)
@@ -330,22 +503,39 @@ export async function compress(
     response.body = compressed
 }
 
-export async function compressStream(event: H3Event, response: Partial<RenderResponse>, method: StreamCompression) {
-  if (isEncoded(event, response))
+/**
+ * Compresses a response body in place by piping it through a compression
+ * stream — the building block of {@link useCompressionStream}.
+ *
+ * Nothing happens for empty or already-encoded bodies. Otherwise
+ * `Vary: Accept-Encoding` is set, and the body is compressed if the client
+ * accepts the coding.
+ * @param { H3Event } event - A H3 event object.
+ * @param { Partial<RenderResponse> } response - A response object with body parameter.
+ * @param { StreamCompression } [method] - The coding to apply, if the client accepts it. Negotiated from `Accept-Encoding` when omitted.
+ * @param { StreamCompressionOptions } [options] - Opt into zstd / brotli detection.
+ * @returns { Promise<void> }
+ */
+export async function compressStream(
+  event: H3Event,
+  response: Partial<RenderResponse>,
+  method?: StreamCompression,
+  options: StreamCompressionOptions = {},
+): Promise<void> {
+  if (isEmptyBody(response.body) || isEncoded(event, response))
+    return
+
+  varyOnAcceptEncoding(event, response)
+
+  const encoding = method
+    ? (acceptsEncoding(event, method) ? method : undefined)
+    : getStreamCompression(event, options)
+  if (!encoding)
     return
 
   const stream = new Response(response.body as string).body as ReadableStream
-  const acceptsEncoding = getRequestHeader(event, 'accept-encoding')?.includes(
-    method,
-  )
-
-  if (acceptsEncoding) {
-    setEncoding(event, response, method)
-    response.body = stream.pipeThrough(createCompressionTransform(method))
-  }
-  else {
-    response.body = stream
-  }
+  setEncoding(event, response, encoding)
+  response.body = stream.pipeThrough(createCompressionTransform(encoding))
 }
 
 function ensureToResponse(): NonNullable<typeof toResponse> {
@@ -361,20 +551,30 @@ function ensureToResponse(): NonNullable<typeof toResponse> {
 /**
  * Rebuilds a `Response` around a new body. Reading `response.arrayBuffer()`
  * consumes the original, so even the "not compressed after all" paths have to
- * go through here rather than returning the drained original.
+ * go through here rather than returning the drained original. Headers of a
+ * `fetch()` response are immutable, so they are never changed in place.
  * @param { Response } response - The response to copy status and headers from.
- * @param { BodyInit } body - The replacement body.
- * @param { string } [method] - Content-Encoding to set; omitted for a plain passthrough.
+ * @param { BodyInit | null } body - The replacement body.
+ * @param { object } [options] - What to change on the copy.
+ * @param { string } [options.encoding] - Content-Encoding to set; omitted for a plain passthrough.
+ * @param { boolean } [options.vary] - Add `Accept-Encoding` to `Vary`.
  * @returns { Response }
  */
-function cloneResponse(response: Response, body: BodyInit, method?: string): Response {
+function cloneResponse(
+  response: Response,
+  body: BodyInit | null,
+  options: { encoding?: string; vary?: boolean } = {},
+): Response {
   const headers = new Headers(response.headers)
 
-  if (method) {
-    headers.set('Content-Encoding', method)
+  if (options.encoding) {
+    headers.set('Content-Encoding', options.encoding)
     // The length changes after compression, let the runtime recompute it.
     headers.delete('Content-Length')
   }
+
+  if (options.vary)
+    headers.set('Vary', mergeVary(headers.get('Vary')))
 
   return new Response(body, {
     status: response.status,
@@ -384,8 +584,20 @@ function cloneResponse(response: Response, body: BodyInit, method?: string): Res
 }
 
 /**
+ * Whether a `Response` has nothing to compress: no body at all (204, 304,
+ * HEAD) or one announced as empty — h3 v2 turns a `null` / `undefined` handler
+ * result into a 200 with an empty body and `Content-Length: 0`.
+ */
+function isBodyless(response: Response): boolean {
+  return !response.body || response.headers.get('Content-Length') === '0'
+}
+
+/**
  * Compresses an h3 v2 response value with [Zlib]{@link https://nodejs.org/api/zlib.html}.
  * Used by the {@link compression} middleware.
+ *
+ * A negotiated response gets `Vary: Accept-Encoding`, compressed or not. A
+ * forced `method` is applied regardless of `Accept-Encoding`, so it does not.
  * @param { H3Event } event - A H3 event object.
  * @param { unknown } value - The value returned by the next handler.
  * @param { Compression } [method] - Force a specific compression method.
@@ -399,10 +611,13 @@ export async function compressResponse(
   options?: CompressionOptions,
 ): Promise<Response> {
   const response = await ensureToResponse()(value, event)
-  const compressionMethod = method ?? getAnyCompression(event, options)
-
-  if (!compressionMethod || response.headers.has('Content-Encoding'))
+  if (isBodyless(response) || isEncodedValue(response.headers.get('Content-Encoding')))
     return response
+
+  const negotiated = method === undefined
+  const compressionMethod = method ?? getAnyCompression(event, options)
+  if (!compressionMethod)
+    return cloneResponse(response, response.body, { vary: true })
 
   const body = new Uint8Array(await response.arrayBuffer())
   if (body.byteLength === 0 || body.byteLength < (options?.minSize ?? 0))
@@ -410,13 +625,16 @@ export async function compressResponse(
 
   const compression = createCompressor(compressionMethod)
 
-  return cloneResponse(response, await compression(body), compressionMethod)
+  return cloneResponse(response, await compression(body), { encoding: compressionMethod, vary: negotiated })
 }
 
 /**
  * Compresses an h3 v2 response value with
  * [CompressionStream]{@link https://developer.mozilla.org/en-US/docs/Web/API/CompressionStream}.
  * Used by the {@link compressionStream} middleware.
+ *
+ * A negotiated response gets `Vary: Accept-Encoding`, compressed or not. A
+ * forced `method` is applied regardless of `Accept-Encoding`, so it does not.
  * @param { H3Event } event - A H3 event object.
  * @param { unknown } value - The value returned by the next handler.
  * @param { StreamCompression } [method] - Force a specific compression method.
@@ -430,10 +648,17 @@ export async function compressResponseStream(
   options?: StreamCompressionOptions,
 ): Promise<Response> {
   const response = await ensureToResponse()(value, event)
-  const compressionMethod = method ?? getStreamCompression(event, options)
-
-  if (!compressionMethod || !response.body || response.headers.has('Content-Encoding'))
+  if (isBodyless(response) || isEncodedValue(response.headers.get('Content-Encoding')))
     return response
 
-  return cloneResponse(response, response.body.pipeThrough(createCompressionTransform(compressionMethod)), compressionMethod)
+  const negotiated = method === undefined
+  const compressionMethod = method ?? getStreamCompression(event, options)
+  if (!compressionMethod)
+    return cloneResponse(response, response.body, { vary: true })
+
+  return cloneResponse(
+    response,
+    response.body!.pipeThrough(createCompressionTransform(compressionMethod)),
+    { encoding: compressionMethod, vary: negotiated },
+  )
 }

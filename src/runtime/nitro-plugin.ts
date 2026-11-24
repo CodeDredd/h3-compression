@@ -4,7 +4,7 @@ import type { H3Event } from 'h3'
 // standalone module under `dist/runtime/`, where a relative path out of the
 // directory would not resolve against the bundled `dist/index.mjs`.
 import type { Compression, RenderResponse, StreamCompression } from 'h3-compression'
-import { compress, compressStream, getAnyCompression, getStreamCompression } from 'h3-compression'
+import { compress, compressStream } from 'h3-compression'
 import type { NuxtCompressionOptions } from './types'
 
 /**
@@ -130,20 +130,17 @@ export async function applyCompression(
     return
 
   if (options.encoding === 'stream') {
-    const method = (options.method as StreamCompression | undefined)
-      ?? getStreamCompression(event, { brotli: options.brotli, zstd: options.zstd })
-
-    if (method)
-      await compressStream(event, response, method)
-
+    await compressStream(event, response, options.method as StreamCompression | undefined, {
+      brotli: options.brotli,
+      zstd: options.zstd,
+    })
     return
   }
 
-  const method = (options.method as Compression | undefined)
-    ?? getAnyCompression(event, { zstd: options.zstd })
-
-  if (method)
-    await compress(event, response, method, { minSize: options.threshold })
+  await compress(event, response, options.method as Compression | undefined, {
+    zstd: options.zstd,
+    minSize: options.threshold,
+  })
 }
 
 /**

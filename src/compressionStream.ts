@@ -1,6 +1,6 @@
 import type { H3Event } from 'h3'
 import type { RenderResponse, StreamCompressionOptions } from './helper'
-import { compressStream, getStreamCompression } from './helper'
+import { compressStream } from './helper'
 
 /**
  * Compresses the response with
@@ -60,7 +60,8 @@ export async function useZstdCompressionStream(
 /**
  * Compresses the response with
  * [CompressionStream]{@link https://developer.mozilla.org/en-US/docs/Web/API/CompressionStream}
- * by 'Accept-Encoding' header. Best is used first.
+ * by 'Accept-Encoding' header. The client's quality values decide; among
+ * equally weighted codings the best is used first. Sets `Vary: Accept-Encoding`.
  *
  * Zstd and brotli are only picked when enabled via `options`.
  * @param event - A H3 event object.
@@ -72,8 +73,5 @@ export async function useCompressionStream(
   response: Partial<RenderResponse>,
   options: StreamCompressionOptions = {},
 ) {
-  const compression = getStreamCompression(event, options)
-
-  if (compression)
-    await compressStream(event, response, compression)
+  await compressStream(event, response, undefined, options)
 }
