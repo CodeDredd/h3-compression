@@ -1,29 +1,24 @@
 export {
-  useGZipCompression,
-  useCompression,
   useBrotliCompression,
+  useCompression,
   useDeflateCompression,
+  useGZipCompression,
   useZstdCompression,
 } from './compression'
 
 export {
-  useGZipCompressionStream,
-  useDeflateCompressionStream,
   useBrotliCompressionStream,
-  useZstdCompressionStream,
   useCompressionStream,
+  useDeflateCompressionStream,
+  useGZipCompressionStream,
+  useZstdCompressionStream,
 } from './compressionStream'
 
 export {
-  compression,
-  compressionStream,
-} from './middleware'
-
-export {
   compress,
-  compressStream,
   compressResponse,
   compressResponseStream,
+  compressStream,
   getAnyCompression,
   getStreamCompression,
   isZstdSupported,
@@ -32,10 +27,15 @@ export {
 export type {
   Compression,
   CompressionOptions,
+  RenderResponse,
   StreamCompression,
   StreamCompressionOptions,
-  RenderResponse,
 } from './helper'
+
+export {
+  compression,
+  compressionStream,
+} from './middleware'
 
 export type {
   CompressionMiddleware,

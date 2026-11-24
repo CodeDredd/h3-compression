@@ -55,9 +55,9 @@
     }
   },
   "files": [
-    "dist",
     "LICENSE",
-    "README.md"
+    "README.md",
+    "dist"
   ],
   "engines": {
     "node": ">=20.11.1"
@@ -83,7 +83,7 @@
     }
   },
   "devDependencies": {
-    "@antfu/eslint-config": "^0.41.0",
+    "@antfu/eslint-config": "^10.0.0",
     "@antfu/ni": "^0.21.6",
     "@antfu/utils": "^0.7.6",
     "@nuxt/kit": "^3.13.0",
@@ -92,7 +92,7 @@
     "@types/supertest": "^2.0.12",
     "@vitest/coverage-v8": "^0.34.3",
     "bumpp": "^9.2.0",
-    "eslint": "^8.48.0",
+    "eslint": "^10.15.0",
     "esno": "^0.17.0",
     "h3": "2.0.8",
     "lint-staged": "^14.0.1",

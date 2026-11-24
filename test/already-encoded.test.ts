@@ -1,16 +1,16 @@
-import { Buffer } from 'node:buffer'
-import { createServer } from 'node:http'
 import type { Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
+import { Buffer } from 'node:buffer'
+import { createServer } from 'node:http'
 import { connect } from 'node:net'
 import zlib from 'node:zlib'
-import { afterEach, describe, expect, it } from 'vitest'
 import * as h3 from 'h3'
+import { afterEach, describe, expect, it } from 'vitest'
 import {
   compress,
-  compressStream,
   compression,
   compressionStream,
+  compressStream,
   useBrotliCompression,
   useCompression,
   useCompressionStream,
@@ -41,7 +41,9 @@ async function readStream(stream: ReadableStream): Promise<Buffer> {
 
 describe.runIf(isV2)('already-encoded responses on the hook path (#24)', () => {
   function encodedEvent(accept = 'br, gzip') {
-    const event = mockEvent('/asset.css', { headers: { 'accept-encoding': accept } })
+    const event = mockEvent('/asset.css', {
+      headers: { 'accept-encoding': accept },
+    })
     event.res.headers.set('content-type', 'text/css')
     event.res.headers.set('content-encoding', 'br')
     event.res.headers.set('content-length', String(precompressed.byteLength))
@@ -91,8 +93,13 @@ describe.runIf(isV2)('already-encoded responses on the hook path (#24)', () => {
   })
 
   it('respects a content-encoding in the render:response header record', async () => {
-    const event = mockEvent('/', { headers: { 'accept-encoding': 'gzip' } })
-    const response = { body: precompressed, headers: { 'Content-Encoding': 'br' } }
+    const event = mockEvent('/', {
+      headers: { 'accept-encoding': 'gzip' },
+    })
+    const response = {
+      body: precompressed,
+      headers: { 'Content-Encoding': 'br' },
+    }
 
     await compress(event, response, 'gzip')
     await compressStream(event, response, 'gzip')
@@ -102,7 +109,9 @@ describe.runIf(isV2)('already-encoded responses on the hook path (#24)', () => {
   })
 
   it('still compresses a body explicitly marked as identity', async () => {
-    const event = mockEvent('/', { headers: { 'accept-encoding': 'gzip' } })
+    const event = mockEvent('/', {
+      headers: { 'accept-encoding': 'gzip' },
+    })
     event.res.headers.set('content-encoding', 'identity')
     const response = { body: original }
 
@@ -127,7 +136,9 @@ describe.runIf(isV2)('already-encoded responses on the hook path (#24)', () => {
 
 describe.runIf(isV2)('stale content-length on the hook path (#24)', () => {
   function eventWithLength(body: string) {
-    const event = mockEvent('/', { headers: { 'accept-encoding': 'gzip' } })
+    const event = mockEvent('/', {
+      headers: { 'accept-encoding': 'gzip' },
+    })
     event.res.headers.set('content-length', String(Buffer.byteLength(body)))
     return event
   }
@@ -155,8 +166,16 @@ describe.runIf(isV2)('stale content-length on the hook path (#24)', () => {
   })
 
   it('drops a content-length from the render:response header record', async () => {
-    const event = mockEvent('/', { headers: { 'accept-encoding': 'gzip' } })
-    const response = { body: original, headers: { 'Content-Length': String(original.length), 'Content-Type': 'text/html' } }
+    const event = mockEvent('/', {
+      headers: { 'accept-encoding': 'gzip' },
+    })
+    const response = {
+      body: original,
+      headers: {
+        'Content-Length': String(original.length),
+        'Content-Type': 'text/html',
+      },
+    }
 
     await compress(event, response, 'gzip')
 
@@ -164,7 +183,9 @@ describe.runIf(isV2)('stale content-length on the hook path (#24)', () => {
   })
 
   it('keeps the content-length when nothing is compressed', async () => {
-    const event = mockEvent('/', { headers: { 'accept-encoding': 'identity' } })
+    const event = mockEvent('/', {
+      headers: { 'accept-encoding': 'identity' },
+    })
     event.res.headers.set('content-length', String(original.length))
     const response = { body: original }
 
@@ -190,8 +211,14 @@ describe.runIf(isV2)('already-encoded responses on the h3 v2 middleware (#24)', 
   }
 
   for (const [name, middleware] of [
-    ['compression()', compression()],
-    ['compressionStream()', compressionStream({ brotli: true })],
+    [
+      'compression()',
+      compression(),
+    ],
+    [
+      'compressionStream()',
+      compressionStream({ brotli: true }),
+    ],
   ] as const) {
     it(`${name} passes the encoded body through`, async () => {
       const res = await appWith(middleware).fetch(new Request('http://localhost/asset.css', {
@@ -228,7 +255,7 @@ function dechunk(raw: Buffer): Buffer {
  * hide a doubly-compressed body or a mismatching `Content-Length`. Only the
  * chunked transfer framing is removed; the body bytes are otherwise untouched.
  */
-function rawGet(server: Server, path: string, acceptEncoding: string): Promise<{ head: string; body: Buffer }> {
+function rawGet(server: Server, path: string, acceptEncoding: string): Promise<{ head: string, body: Buffer }> {
   const { port } = server.address() as AddressInfo
   return new Promise((resolve, reject) => {
     const socket = connect(port, '127.0.0.1', () => {
@@ -241,7 +268,12 @@ function rawGet(server: Server, path: string, acceptEncoding: string): Promise<{
       const separator = raw.indexOf('\r\n\r\n')
       const head = raw.subarray(0, separator).toString()
       const body = raw.subarray(separator + 4)
-      resolve({ head, body: /^transfer-encoding: chunked/im.test(head) ? dechunk(body) : body })
+      resolve({
+        head,
+        body: /^transfer-encoding: chunked/im.test(head)
+          ? dechunk(body)
+          : body,
+      })
     })
     socket.on('error', reject)
   })
@@ -280,8 +312,14 @@ describe.runIf(isV1)('already-encoded responses on the h3 v1 app hook (#24)', ()
   for (const [name, hook] of [
     ['useBrotliCompression', useBrotliCompression],
     ['useCompression', useCompression],
-    ['useCompressionStream', (event: any, response: any) => useCompressionStream(event, response, { brotli: true })],
-    ['nuxt plugin', (event: any, response: any) => applyCompression(event, response, {})],
+    [
+      'useCompressionStream',
+      (event: any, response: any) => useCompressionStream(event, response, { brotli: true }),
+    ],
+    [
+      'nuxt plugin',
+      (event: any, response: any) => applyCompression(event, response, {}),
+    ],
   ] as const) {
     it(`${name} does not compress a pre-compressed asset again`, async () => {
       const { head, body } = await rawGet(await listen(hook, true), '/asset.css', 'br')
@@ -294,7 +332,10 @@ describe.runIf(isV1)('already-encoded responses on the h3 v1 app hook (#24)', ()
 
   for (const [name, hook] of [
     ['useCompression', useCompression],
-    ['useCompressionStream', (event: any, response: any) => useCompressionStream(event, response)],
+    [
+      'useCompressionStream',
+      (event: any, response: any) => useCompressionStream(event, response),
+    ],
   ] as const) {
     it(`${name} drops the stale content-length when compressing`, async () => {
       const { head, body } = await rawGet(await listen(hook, false), '/asset.css', 'gzip')

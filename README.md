@@ -55,8 +55,8 @@ Example using <a href="https://github.com/unjs/listhen">listhen</a> for an elega
 
 ```ts
 import { createApp, eventHandler, toNodeListener } from 'h3'
-import { listen } from 'listhen'
 import { useCompressionStream } from 'h3-compression'
+import { listen } from 'listhen'
 
 const app = createApp({ onBeforeResponse: useCompressionStream }) // or { onBeforeResponse: useCompression }
 app.use(
@@ -166,7 +166,9 @@ Branch on it yourself with the exported predicate:
 ```ts
 import { isZstdSupported } from 'h3-compression'
 
-app.use(compression({ zstd: isZstdSupported() }))
+app.use(compression({
+  zstd: isZstdSupported()
+}))
 ```
 
 ## Nuxt 3 & 4
@@ -192,7 +194,13 @@ export default defineNuxtConfig({
     brotli: false, // stream path only — zlib always prefers brotli
     zstd: false, // needs Node >= 22.15
     method: undefined, // force one method instead of negotiating
-    contentTypes: ['text/', 'application/json', 'application/javascript', 'application/xml', 'image/svg+xml'],
+    contentTypes: [
+      'text/',
+      'application/json',
+      'application/javascript',
+      'application/xml',
+      'image/svg+xml'
+    ],
     exclude: ['/_nuxt', '/__nuxt'],
     routeRules: true, // also compress cached (swr/isr) routes and /server/api
     threshold: 0, // skip bodies smaller than this many bytes
@@ -259,7 +267,7 @@ before calling it.
 
 H3-compression has a concept of composable utilities that accept `event` (from `eventHandler((event) => {})`) as their first argument and `response` as their second.
 
-#### Zlib Compression
+### Zlib Compression
 
 - `useGZipCompression(event, response)`
 - `useDeflateCompression(event, response)`
@@ -268,7 +276,7 @@ H3-compression has a concept of composable utilities that accept `event` (from `
 - `useCompression(event, response, options?)` &nbsp;– pass `{ zstd: true }` to include zstd
 - `compress(event, response, method?, options?)` &nbsp;– low-level helper; negotiates when `method` is omitted
 
-#### Stream Compression
+### Stream Compression
 
 - `useGZipCompressionStream(event, response)`
 - `useDeflateCompressionStream(event, response)`
@@ -277,7 +285,7 @@ H3-compression has a concept of composable utilities that accept `event` (from `
 - `useCompressionStream(event, response, options?)` &nbsp;– pass `{ brotli: true }` / `{ zstd: true }`
 - `compressStream(event, response, method?, options?)` &nbsp;– low-level helper; negotiates when `method` is omitted
 
-#### Middleware (h3 v2)
+### Middleware (h3 v2)
 
 - `compression(method | options?)` &nbsp;– middleware using zlib (brotli, gzip, deflate, opt-in zstd)
 - `compressionStream(method | options?)` &nbsp;– stream middleware (gzip, deflate, opt-in brotli / zstd)
@@ -285,7 +293,7 @@ H3-compression has a concept of composable utilities that accept `event` (from `
 - `compressResponseStream(event, value, method?, options?)` &nbsp;– low-level stream helper returning a compressed `Response`
 - `isZstdSupported()` &nbsp;– whether the runtime can compress with zstd
 
-#### Nuxt
+### Nuxt
 
 - `h3-compression/nuxt` &nbsp;– the Nuxt module, configured under the `compression` key
 
@@ -293,7 +301,7 @@ H3-compression has a concept of composable utilities that accept `event` (from `
 
 <p align="center">
   <a href="https://pinia-orm.codedredd.de/sponsorkit/sponsors.png">
-    <img src='https://pinia-orm.codedredd.de/sponsorkit/sponsors.svg'/>
+    <img src='https://pinia-orm.codedredd.de/sponsorkit/sponsors.svg' alt='Sponsors'/>
   </a>
 </p>
 

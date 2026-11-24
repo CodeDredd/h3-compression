@@ -1,7 +1,7 @@
 import { execSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
-import { fileURLToPath } from 'node:url'
 import { dirname, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { beforeAll, describe, expect, it } from 'vitest'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
@@ -52,9 +52,13 @@ describe('downstream bundling (regression for #14 follow-up)', () => {
     const warnings: string[] = []
     const bundle = await rollup({
       input: distEntry,
-      plugins: [stubPlugin() as any],
+      plugins: [
+        stubPlugin() as any,
+      ],
       onwarn(warning) {
-        warnings.push(typeof warning === 'string' ? warning : warning.message)
+        warnings.push(typeof warning === 'string'
+          ? warning
+          : warning.message)
       },
     })
     await bundle.generate({ format: 'es' })

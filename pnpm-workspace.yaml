@@ -1,3 +1,7 @@
+minimumReleaseAgeExcludePrune: true
+trustPolicy: no-downgrade
+shellEmulator: true
+
 packages:
   - playground
   - examples/*

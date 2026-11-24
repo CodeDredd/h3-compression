@@ -1,7 +1,7 @@
 import { Buffer } from 'node:buffer'
 import zlib from 'node:zlib'
-import { describe, expect, it } from 'vitest'
 import * as h3 from 'h3'
+import { describe, expect, it } from 'vitest'
 import {
   useBrotliCompressionStream,
   useCompressionStream,
@@ -17,7 +17,9 @@ const { mockEvent } = h3 as typeof import('h3')
 const html = '<h1>Hello World</h1>'
 
 function eventFor(encoding: string) {
-  return mockEvent('/', { headers: { 'accept-encoding': encoding } })
+  return mockEvent('/', {
+    headers: { 'accept-encoding': encoding },
+  })
 }
 
 async function readStream(stream: ReadableStream): Promise<Buffer> {
