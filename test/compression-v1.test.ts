@@ -21,7 +21,7 @@ function rawParser(res: any, cb: (err: Error | null, body: Buffer) => void) {
 
 // `createApp` / `eventHandler` / `toNodeListener` exist in both h3 versions, but
 // the `onBeforeResponse` app hook only works in v1.
-const { createApp, eventHandler, toNodeListener } = h3 as typeof import('h3')
+const { createApp, eventHandler, setResponseHeader, toNodeListener } = h3 as typeof import('h3')
 
 const html = '<h1>Hello World</h1>'
 const json = {
@@ -210,6 +210,40 @@ describe.runIf(isV1)('nuxt plugin on h3 v1 (#22)', () => {
 
     expect(result.status).toEqual(200)
     expect(result.headers['content-encoding']).toBeUndefined()
+    expect(result.text).toEqual(html)
+  })
+
+  // On h3 v1 the content type a handler (or Nitro's static handler) sets lives
+  // on the node response, not on `event.res` — it was read as empty, which
+  // counts as compressible, so the `contentTypes` filter never applied.
+  function typedAppWith(contentType: string, body: string | Buffer) {
+    const app = createApp({
+      onBeforeResponse: (event, response) => applyCompression(event, response, {}),
+    })
+    app.use('/', eventHandler((event) => {
+      setResponseHeader(event, 'Content-Type', contentType)
+      return body
+    }))
+    return supertest(toNodeListener(app))
+  }
+
+  it('skips content types outside the filter set on the event', async () => {
+    const png = Buffer.alloc(2048, 7)
+    const result = await typedAppWith('image/png', png)
+      .get('/')
+      .set('Accept-Encoding', 'gzip')
+      .buffer(true)
+      .parse(rawParser)
+
+    expect(result.headers['content-encoding']).toBeUndefined()
+    expect(result.headers['content-type']).toEqual('image/png')
+    expect(Buffer.compare(result.body, png)).toEqual(0)
+  })
+
+  it('still compresses content types inside the filter set on the event', async () => {
+    const result = await typedAppWith('text/css', html).get('/').set('Accept-Encoding', 'gzip')
+
+    expect(result.headers['content-encoding']).toEqual('gzip')
     expect(result.text).toEqual(html)
   })
 })

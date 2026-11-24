@@ -67,7 +67,8 @@ export function getPath(event: H3Event): string {
 /**
  * Reads the response content type from whichever shape the hook provided.
  * `render:response` carries a plain header record, `beforeResponse` may carry
- * none at all — in which case the already-set response headers are used.
+ * none at all — in which case the already-set response headers are used, from
+ * `event.res` on h3 v2 or the node response on h3 v1.
  * @param { H3Event } event - A H3 event object.
  * @param { HookResponse } response - The response object handed over by the hook.
  * @returns { string }
@@ -80,8 +81,23 @@ export function getContentType(event: H3Event, response: HookResponse): string {
       return direct
   }
 
+  // h3 v2 keeps the response headers on `event.res`.
   const resHeaders = (event as unknown as { res?: { headers?: Headers } }).res?.headers
-  return resHeaders?.get?.('content-type') ?? ''
+  const fromEvent = resHeaders?.get?.('content-type')
+  if (fromEvent)
+    return fromEvent
+
+  // h3 v1 (Nitro 2, i.e. Nuxt 3 / 4) writes them straight to the node
+  // response — that is where Nitro's static handler and `setResponseHeader`
+  // put the content type of public assets and API routes.
+  const nodeRes = (event as unknown as { node?: { res?: { getHeader?: (name: string) => unknown } } }).node?.res
+  const fromNode = nodeRes?.getHeader?.('content-type')
+  if (Array.isArray(fromNode))
+    return fromNode.join(', ')
+
+  return typeof fromNode === 'string'
+    ? fromNode
+    : ''
 }
 
 /**
