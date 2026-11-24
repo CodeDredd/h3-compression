@@ -14,7 +14,7 @@
 
 ✔️ &nbsp;**Stream Compression:** You can use stream compressions (gzip, deflate and opt-in brotli / zstd)
 
-✔️ &nbsp;**Compression Detection:** It uses the best compression which is accepted
+✔️ &nbsp;**Compression Detection:** Picks the best encoding the client accepts, honouring `Accept-Encoding` quality values, and sets `Vary: Accept-Encoding`
 
 ✔️ &nbsp;**h3 v1 & v2:** Works with both [h3](https://h3.dev) v1 and v2
 
@@ -36,6 +36,8 @@ pnpm add h3-compression
 ```
 
 ## Usage (h3 v1)
+
+The `onBeforeResponse` app option used below exists since h3 1.8.
 
 ```ts
 import { createServer } from 'node:http'
@@ -144,8 +146,8 @@ await useBrotliCompressionStream(event, response)
 Zstd is supported on both paths, and is opt-in for a different reason than brotli: `node:zlib`
 only gained zstd in **Node 22.15.0** (and 23.8.0). Enabling it by default would make the
 negotiated `Content-Encoding` depend on the Node version the app happens to run on, which is a
-poor thing to discover in production. The package itself only requires Node >= 20.11.1, the same
-floor as h3.
+poor thing to discover in production. The package itself only requires Node >= 20.11.1 (h3 v2
+needs >= 20.19).
 
 ```ts
 app.use(compression({ zstd: true })) // zstd, then brotli, then gzip, then deflate
@@ -253,15 +255,24 @@ export default defineNitroPlugin((nitro) => {
     if (['/_nuxt', '/__nuxt'].some(prefix => event.path.startsWith(prefix)))
       return
 
+    // No header record here — the content type is already set on the event.
+    // An unset one means an object body that h3 will send as JSON.
+    const contentType = getResponseHeader(event, 'content-type') ?? ''
+    if (contentType && !/^(?:text\/|application\/json)/.test(contentType))
+      return
+
     await useCompression(event, response)
   })
 })
 ````
 
 `useCompression` compresses string, `Buffer`/`Uint8Array` and JSON (object) bodies and
-skips everything else (e.g. streams), so binary assets are left untouched. If you only
-want to compress specific content types, guard on `response.headers?.['content-type']`
-before calling it.
+skips streams, blobs, `Response` objects and bodies that already carry a `Content-Encoding`.
+It does **not** look at the
+content type, so binary assets served as a `Buffer` (e.g. images from `public/`) would be
+compressed too — guard on the content type as above. In `render:response` it is in the
+`response.headers` record; in `beforeResponse` it is on the event. The module does all of
+this for you.
 
 ## Utilities
 
@@ -305,7 +316,7 @@ H3-compression has a concept of composable utilities that accept `event` (from `
   </a>
 </p>
 
-## Releated Projects
+## Related Projects
 
 - [H3](https://github.com/unjs/h3)
 
