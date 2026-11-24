@@ -1,6 +1,6 @@
 import type { H3Event } from 'h3'
 import type { CompressionOptions, RenderResponse } from './helper'
-import { compress, getAnyCompression } from './helper'
+import { compress } from './helper'
 
 /**
  * Compresses the response with [zlib.gzip]{@link https://www.w3schools.com/nodejs/ref_zlib.asp}
@@ -57,7 +57,8 @@ export async function useZstdCompression(
 
 /**
  * Compresses the response with [Zlib]{@link https://www.w3schools.com/nodejs/ref_zlib.asp}
- * by 'Accept-Encoding' header. Best is used first.
+ * by 'Accept-Encoding' header. The client's quality values decide; among
+ * equally weighted codings the best is used first. Sets `Vary: Accept-Encoding`.
  *
  * Zstd is only picked when enabled via `options.zstd` and supported by the runtime.
  * @param { H3Event } event - A H3 event object.
@@ -70,7 +71,5 @@ export async function useCompression(
   response: Partial<RenderResponse>,
   options: CompressionOptions = {},
 ): Promise<void> {
-  const compression = getAnyCompression(event, options)
-  if (compression)
-    await compress(event, response, compression, options)
+  await compress(event, response, undefined, options)
 }

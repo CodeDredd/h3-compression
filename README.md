@@ -89,6 +89,27 @@ createServer(toNodeHandler(app)).listen(process.env.PORT || 3000)
 You can also force a specific method (e.g. `compression('gzip')`) instead of detecting it from the
 `Accept-Encoding` header.
 
+## Content negotiation
+
+The encoding is picked from the `Accept-Encoding` header as described in
+[RFC 9110](https://www.rfc-editor.org/rfc/rfc9110#section-12.5.3):
+
+- Quality values decide first: `gzip;q=0.1, deflate;q=0.9` picks deflate, and an encoding sent
+  with `q=0` is never used (`br;q=0, gzip` picks gzip, `gzip;q=0` compresses nothing).
+- Among equally weighted encodings the server preference applies — zstd (opt-in), brotli, gzip,
+  deflate.
+- `*` stands for every encoding not listed explicitly, and `x-gzip` counts as gzip.
+- Without an `Accept-Encoding` header nothing is compressed.
+
+Every response whose encoding was negotiated gets `Vary: Accept-Encoding` — compressed or not —
+so shared caches and CDNs never serve a compressed body to a client that didn't ask for it.
+Existing `Vary` values are kept. A method forced on the middleware ignores `Accept-Encoding`, so
+it doesn't add `Vary`; the forced composables (`useGZipCompression`, …) still only compress when
+the client accepts that encoding.
+
+Responses that already carry a `Content-Encoding` (e.g. pre-compressed public assets) and
+empty bodies are passed through untouched.
+
 ## Brotli and stream compression
 
 The native [`CompressionStream`](https://developer.mozilla.org/en-US/docs/Web/API/CompressionStream)
@@ -245,6 +266,7 @@ H3-compression has a concept of composable utilities that accept `event` (from `
 - `useBrotliCompression(event, response)`
 - `useZstdCompression(event, response)` &nbsp;– requires Node >= 22.15
 - `useCompression(event, response, options?)` &nbsp;– pass `{ zstd: true }` to include zstd
+- `compress(event, response, method?, options?)` &nbsp;– low-level helper; negotiates when `method` is omitted
 
 #### Stream Compression
 
@@ -253,6 +275,7 @@ H3-compression has a concept of composable utilities that accept `event` (from `
 - `useBrotliCompressionStream(event, response)`
 - `useZstdCompressionStream(event, response)` &nbsp;– requires Node >= 22.15
 - `useCompressionStream(event, response, options?)` &nbsp;– pass `{ brotli: true }` / `{ zstd: true }`
+- `compressStream(event, response, method?, options?)` &nbsp;– low-level helper; negotiates when `method` is omitted
 
 #### Middleware (h3 v2)
 
