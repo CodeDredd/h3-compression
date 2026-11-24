@@ -9,14 +9,16 @@ const distEntry = resolve(root, 'dist/index.mjs')
 
 /**
  * A stub for `h3` that mimics how a single h3 major looks to a bundler: it
- * exports the symbols that exist in *both* versions, but never both `send`
- * (v1 only) and `toResponse` (v2 only). If the package forces a static named
- * import of a version-specific symbol, Rollup re-bundling `dist/index.mjs`
- * (as Nuxt / Nitro does) emits a `MISSING_EXPORT` warning — exactly the
- * `"toResponse" is not exported by h3` build error reported downstream.
+ * exports the symbols that exist in *both* versions, but never `send` (v1
+ * only), `toResponse` (v2 only) or `removeResponseHeader` (h3 >= 1.8). If the
+ * package forces a static named import of a version-specific symbol, Rollup
+ * re-bundling `dist/index.mjs` (as Nuxt / Nitro does) emits a `MISSING_EXPORT`
+ * warning — exactly the `"toResponse" is not exported by h3` build error
+ * reported downstream.
  */
 const h3Stub = `
 export const getRequestHeader = () => undefined
+export const getResponseHeader = () => undefined
 export const setResponseHeader = () => undefined
 `
 
@@ -59,7 +61,7 @@ describe('downstream bundling (regression for #14 follow-up)', () => {
     await bundle.close()
 
     const missingExport = warnings.filter(
-      w => /is not exported by/.test(w) || /toResponse|"send"/.test(w),
+      w => /is not exported by/.test(w) || /toResponse|"send"|removeResponseHeader/.test(w),
     )
 
     expect(missingExport).toEqual([])
