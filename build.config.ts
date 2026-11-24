@@ -16,7 +16,12 @@ export default defineBuildConfig({
       declaration: true,
     },
   ],
-  externals: ['@nuxt/kit', '@nuxt/schema', 'h3', 'h3-compression'],
+  externals: [
+    '@nuxt/kit',
+    '@nuxt/schema',
+    'h3',
+    'h3-compression',
+  ],
   declaration: true,
   clean: true,
   rollup: {

@@ -4,8 +4,8 @@ import type { H3Event } from 'h3'
 // standalone module under `dist/runtime/`, where a relative path out of the
 // directory would not resolve against the bundled `dist/index.mjs`.
 import type { Compression, RenderResponse, StreamCompression } from 'h3-compression'
-import { compress, compressStream } from 'h3-compression'
 import type { NuxtCompressionOptions } from './types'
+import { compress, compressStream } from 'h3-compression'
 
 /**
  * The subset of the Nitro app this plugin touches. Typed structurally so the
@@ -52,12 +52,16 @@ export function getPath(event: H3Event): string {
     return url.pathname
 
   const originalUrl = (event as unknown as { node?: { req?: { originalUrl?: string } } })
-    .node?.req?.originalUrl
+    .node
+    ?.req
+    ?.originalUrl
   if (typeof originalUrl === 'string')
     return originalUrl.split('?')[0]
 
   const path = (event as unknown as { path?: string }).path
-  return typeof path === 'string' ? path.split('?')[0] : '/'
+  return typeof path === 'string'
+    ? path.split('?')[0]
+    : '/'
 }
 
 /**

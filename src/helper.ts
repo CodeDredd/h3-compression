@@ -1,9 +1,9 @@
+import type { H3Event } from 'h3'
+import { Buffer } from 'node:buffer'
+import process from 'node:process'
+import { Duplex, Readable } from 'node:stream'
 import { promisify } from 'node:util'
 import zlib from 'node:zlib'
-import { Buffer } from 'node:buffer'
-import { Duplex, Readable } from 'node:stream'
-import process from 'node:process'
-import type { H3Event } from 'h3'
 import * as h3 from 'h3'
 
 const { getRequestHeader, getResponseHeader, setResponseHeader } = h3
@@ -99,7 +99,9 @@ const CODING_ALIASES: Record<string, string> = { 'x-gzip': 'gzip' }
  */
 function parseQuality(value: string): number {
   const quality = Number(value.trim())
-  return Number.isFinite(quality) ? Math.min(Math.max(quality, 0), 1) : 0
+  return Number.isFinite(quality)
+    ? Math.min(Math.max(quality, 0), 1)
+    : 0
 }
 
 /**
@@ -144,7 +146,9 @@ function getAcceptedEncodings(event: H3Event): Map<string, number> | undefined {
   if (!header)
     return undefined
 
-  return parseAcceptEncoding(Array.isArray(header) ? header.join(',') : header)
+  return parseAcceptEncoding(Array.isArray(header)
+    ? header.join(',')
+    : header)
 }
 
 /**
@@ -349,24 +353,41 @@ function serializeJson(body: unknown): string | undefined {
  * `undefined` for bodies that can't / shouldn't be buffered (streams, blobs,
  * responses, empty).
  */
-function toCompressibleBuffer(body: unknown): { payload: Buffer; json: boolean } | undefined {
+function toCompressibleBuffer(body: unknown): { payload: Buffer, json: boolean } | undefined {
   if (isEmptyBody(body))
     return undefined
 
-  if (typeof body === 'string')
-    return { payload: Buffer.from(body), json: false }
+  if (typeof body === 'string') {
+    return {
+      payload: Buffer.from(body),
+      json: false,
+    }
+  }
 
-  if (body instanceof Uint8Array)
-    return { payload: Buffer.from(body), json: false }
+  if (body instanceof Uint8Array) {
+    return {
+      payload: Buffer.from(body),
+      json: false,
+    }
+  }
 
-  if (body instanceof ArrayBuffer)
-    return { payload: Buffer.from(body), json: false }
+  if (body instanceof ArrayBuffer) {
+    return {
+      payload: Buffer.from(body),
+      json: false,
+    }
+  }
 
   if (!isJsonBody(body))
     return undefined
 
   const json = serializeJson(body)
-  return json === undefined ? undefined : { payload: Buffer.from(json), json: true }
+  return json === undefined
+    ? undefined
+    : {
+        payload: Buffer.from(json),
+        json: true,
+      }
 }
 
 /**
@@ -379,24 +400,41 @@ function toCompressibleBuffer(body: unknown): { payload: Buffer; json: boolean }
  * starts consuming the node stream, so the "not compressed" path must not
  * touch it.
  */
-function toStreamSource(body: unknown): { open: () => ReadableStream; json: boolean } | undefined {
+function toStreamSource(body: unknown): { open: () => ReadableStream, json: boolean } | undefined {
   if (isEmptyBody(body))
     return undefined
 
-  if (isReadableStream(body))
-    return { open: () => body, json: false }
+  if (isReadableStream(body)) {
+    return {
+      open: () => body,
+      json: false,
+    }
+  }
 
-  if (isNodeStream(body))
-    return { open: () => Readable.toWeb(body) as unknown as ReadableStream, json: false }
+  if (isNodeStream(body)) {
+    return {
+      open: () => Readable.toWeb(body) as unknown as ReadableStream,
+      json: false,
+    }
+  }
 
-  if (typeof body === 'string' || body instanceof Uint8Array || body instanceof ArrayBuffer || isBlob(body))
-    return { open: () => new Response(body as BodyInit).body as ReadableStream, json: false }
+  if (typeof body === 'string' || body instanceof Uint8Array || body instanceof ArrayBuffer || isBlob(body)) {
+    return {
+      open: () => new Response(body as BodyInit).body as ReadableStream,
+      json: false,
+    }
+  }
 
   if (!isJsonBody(body))
     return undefined
 
   const json = serializeJson(body)
-  return json === undefined ? undefined : { open: () => new Response(json).body as ReadableStream, json: true }
+  return json === undefined
+    ? undefined
+    : {
+        open: () => new Response(json).body as ReadableStream,
+        json: true,
+      }
 }
 
 /**
@@ -424,7 +462,9 @@ function getHeader(event: H3Event, response: Partial<RenderResponse>, name: stri
   }
 
   const value = getResponseHeader(event, name)
-  return value == null ? undefined : String(value)
+  return value == null
+    ? undefined
+    : String(value)
 }
 
 /**
@@ -497,14 +537,20 @@ function mergeVary(vary: string | null | undefined): string {
  */
 function varyOnAcceptEncoding(event: H3Event, response: Partial<RenderResponse>): void {
   const headers = response.headers
-  const key = headers && typeof headers === 'object' ? findHeaderKey(headers, 'vary') : undefined
+  const key = headers && typeof headers === 'object'
+    ? findHeaderKey(headers, 'vary')
+    : undefined
   if (headers && key !== undefined) {
-    headers[key] = mergeVary(headers[key] == null ? undefined : String(headers[key]))
+    headers[key] = mergeVary(headers[key] == null
+      ? undefined
+      : String(headers[key]))
     return
   }
 
   const current = getResponseHeader(event, 'vary')
-  setResponseHeader(event, 'Vary', mergeVary(current == null ? undefined : String(current)))
+  setResponseHeader(event, 'Vary', mergeVary(current == null
+    ? undefined
+    : String(current)))
 }
 
 /**
@@ -552,7 +598,9 @@ export async function compress(
   varyOnAcceptEncoding(event, response)
 
   const encoding = method
-    ? (acceptsEncoding(event, method) ? method : undefined)
+    ? (acceptsEncoding(event, method)
+        ? method
+        : undefined)
     : getAnyCompression(event, options)
   if (!encoding)
     return
@@ -601,7 +649,9 @@ export async function compressStream(
   varyOnAcceptEncoding(event, response)
 
   const encoding = method
-    ? (acceptsEncoding(event, method) ? method : undefined)
+    ? (acceptsEncoding(event, method)
+        ? method
+        : undefined)
     : getStreamCompression(event, options)
   if (!encoding)
     return
@@ -639,7 +689,7 @@ function ensureToResponse(): NonNullable<typeof toResponse> {
 function cloneResponse(
   response: Response,
   body: BodyInit | null,
-  options: { encoding?: string; vary?: boolean } = {},
+  options: { encoding?: string, vary?: boolean } = {},
 ): Response {
   const headers = new Headers(response.headers)
 

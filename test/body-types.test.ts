@@ -1,9 +1,9 @@
 import { Buffer } from 'node:buffer'
 import { Readable } from 'node:stream'
 import zlib from 'node:zlib'
+import * as h3 from 'h3'
 import supertest from 'supertest'
 import { describe, expect, it } from 'vitest'
-import * as h3 from 'h3'
 import { compress, compressStream, useCompression, useCompressionStream } from '../src'
 import { applyCompression } from '../src/runtime/nitro-plugin'
 import { isV1, isV2 } from './_version'
@@ -15,7 +15,10 @@ import { isV1, isV2 } from './_version'
 
 const { createApp, eventHandler, mockEvent, toNodeListener } = h3 as typeof import('h3')
 
-const json = { message: 'hello world', items: [1, 2, 3] }
+const json = {
+  message: 'hello world',
+  items: [1, 2, 3],
+}
 const text = 'Hello world! '.repeat(50)
 
 async function readStream(stream: ReadableStream): Promise<Buffer> {
@@ -31,13 +34,18 @@ async function readStream(stream: ReadableStream): Promise<Buffer> {
 }
 
 function eventFor(encoding = 'gzip') {
-  return mockEvent('/', { headers: { 'accept-encoding': encoding } })
+  return mockEvent('/', {
+    headers: { 'accept-encoding': encoding },
+  })
 }
 
 describe.runIf(isV2)('stream path body types', () => {
   it.each([
     ['an object', json],
-    ['an array', [1, 2, 3]],
+    [
+      'an array',
+      [1, 2, 3],
+    ],
     ['a number', 42],
   ])('serializes %s as JSON', async (_name, body) => {
     const event = eventFor()
@@ -52,7 +60,12 @@ describe.runIf(isV2)('stream path body types', () => {
 
   it('streams a node stream', async () => {
     const event = eventFor()
-    const response: { body: unknown } = { body: Readable.from([text.slice(0, 100), text.slice(100)]) }
+    const response: { body: unknown } = {
+      body: Readable.from([
+        text.slice(0, 100),
+        text.slice(100),
+      ]),
+    }
 
     await useCompressionStream(event, response)
 
@@ -62,7 +75,9 @@ describe.runIf(isV2)('stream path body types', () => {
 
   it('streams a blob', async () => {
     const event = eventFor()
-    const response: { body: unknown } = { body: new Blob([text]) }
+    const response: { body: unknown } = {
+      body: new Blob([text]),
+    }
 
     await useCompressionStream(event, response)
 
@@ -96,11 +111,26 @@ describe.runIf(isV2)('stream path body types', () => {
 
 describe.runIf(isV2)('buffered path body types', () => {
   it.each([
-    ['a node stream', () => Readable.from([text])],
-    ['a web stream', () => new Response(text).body],
-    ['a blob', () => new Blob([text])],
-    ['a Response', () => new Response(text)],
-    ['an error', () => new Error('boom')],
+    [
+      'a node stream',
+      () => Readable.from([text]),
+    ],
+    [
+      'a web stream',
+      () => new Response(text).body,
+    ],
+    [
+      'a blob',
+      () => new Blob([text]),
+    ],
+    [
+      'a Response',
+      () => new Response(text),
+    ],
+    [
+      'an error',
+      () => new Error('boom'),
+    ],
   ])('leaves %s alone instead of serializing it', async (_name, create) => {
     const event = eventFor()
     const body = create()

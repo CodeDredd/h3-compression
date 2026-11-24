@@ -1,9 +1,9 @@
+import type { SuperTest, Test } from 'supertest'
 import { Buffer } from 'node:buffer'
 import zlib from 'node:zlib'
-import type { SuperTest, Test } from 'supertest'
+import * as h3 from 'h3'
 import supertest from 'supertest'
 import { beforeEach, describe, expect, it } from 'vitest'
-import * as h3 from 'h3'
 import { compression, compressionStream } from '../src'
 import { isV2 } from './_version'
 

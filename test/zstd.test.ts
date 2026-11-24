@@ -1,9 +1,9 @@
+import type { SuperTest, Test } from 'supertest'
 import { Buffer } from 'node:buffer'
 import zlib from 'node:zlib'
-import type { SuperTest, Test } from 'supertest'
+import * as h3 from 'h3'
 import supertest from 'supertest'
 import { describe, expect, it } from 'vitest'
-import * as h3 from 'h3'
 import {
   compression,
   compressionStream,
@@ -27,7 +27,9 @@ const html = '<h1>Hello World</h1>'
 const hasZstd = isZstdSupported()
 
 function eventFor(encoding: string) {
-  return mockEvent('/', { headers: { 'accept-encoding': encoding } })
+  return mockEvent('/', {
+    headers: { 'accept-encoding': encoding },
+  })
 }
 
 // superagent does not auto-decode zstd, so read the raw bytes ourselves.

@@ -1,13 +1,13 @@
 import { Buffer } from 'node:buffer'
 import zlib from 'node:zlib'
+import * as h3 from 'h3'
 import supertest from 'supertest'
 import { describe, expect, it } from 'vitest'
-import * as h3 from 'h3'
 import {
   compress,
-  compressStream,
   compression,
   compressionStream,
+  compressStream,
   getAnyCompression,
   getStreamCompression,
   isZstdSupported,
@@ -28,10 +28,14 @@ const hasZstd = isZstdSupported()
 const html = `<h1>${'Hello world! '.repeat(100)}</h1>`
 
 function eventFor(encoding?: string) {
-  return mockEvent('/', { headers: encoding === undefined ? {} : { 'accept-encoding': encoding } })
+  return mockEvent('/', {
+    headers: encoding === undefined
+      ? {}
+      : { 'accept-encoding': encoding },
+  })
 }
 
-describe.runIf(isV2)('Accept-Encoding negotiation (#25)', () => {
+describe.runIf(isV2)('accept-Encoding negotiation (#25)', () => {
   it.each([
     ['br;q=0, gzip', 'gzip'],
     ['gzip;q=0', undefined],
@@ -62,8 +66,16 @@ describe.runIf(isV2)('Accept-Encoding negotiation (#25)', () => {
   it.each([
     ['br, gzip', {}, 'gzip'],
     ['br;q=1, gzip;q=0.5', {}, 'gzip'],
-    ['br;q=1, gzip;q=0.5', { brotli: true }, 'br'],
-    ['br;q=0.5, gzip', { brotli: true }, 'gzip'],
+    [
+      'br;q=1, gzip;q=0.5',
+      { brotli: true },
+      'br',
+    ],
+    [
+      'br;q=0.5, gzip',
+      { brotli: true },
+      'gzip',
+    ],
     ['gzip;q=0, deflate;q=0.2', {}, 'deflate'],
     ['gzip;q=0', {}, undefined],
   ] as const)('getStreamCompression(%j, %j) -> %s', (header, options, expected) => {
@@ -78,7 +90,7 @@ describe.runIf(isV2)('Accept-Encoding negotiation (#25)', () => {
   })
 })
 
-describe.runIf(isV2)('Vary: Accept-Encoding on the hook path (#25)', () => {
+describe.runIf(isV2)('vary: Accept-Encoding on the hook path (#25)', () => {
   it('is set on a compressed response', async () => {
     const event = eventFor('gzip')
     const response = { body: html }
@@ -125,7 +137,10 @@ describe.runIf(isV2)('Vary: Accept-Encoding on the hook path (#25)', () => {
 
   it('updates a Vary in the render:response header record', async () => {
     const event = eventFor('gzip')
-    const response = { body: html, headers: { 'Vary': 'Cookie', 'Content-Type': 'text/html' } }
+    const response = {
+      body: html,
+      headers: { 'Vary': 'Cookie', 'Content-Type': 'text/html' },
+    }
 
     await useCompression(event, response)
 
@@ -187,7 +202,10 @@ describe.runIf(isV2)('Vary: Accept-Encoding on the hook path (#25)', () => {
 
   it('applies to the nuxt plugin', async () => {
     const event = eventFor('br;q=0, gzip')
-    const response = { body: html, headers: { 'content-type': 'text/html' } }
+    const response = {
+      body: html,
+      headers: { 'content-type': 'text/html' },
+    }
 
     await applyCompression(event, response, {})
 
@@ -212,17 +230,49 @@ describe.runIf(isV2)('negotiation on the h3 v2 middleware (#25)', () => {
   }
 
   async function get(app: InstanceType<typeof H3>, encoding: string, path = '/') {
-    return app.fetch(new Request(`http://localhost${path}`, { headers: { 'accept-encoding': encoding } }))
+    return app.fetch(new Request(`http://localhost${path}`, {
+      headers: { 'accept-encoding': encoding },
+    }))
   }
 
   // The reproduction from the issue.
   it.each([
-    ['compression()', () => compression(), 'br;q=0, gzip', 'gzip'],
-    ['compression()', () => compression(), 'gzip;q=0', null],
-    ['compression()', () => compression(), 'gzip;q=0.1, deflate;q=0.9', 'deflate'],
-    ['compressionStream()', () => compressionStream(), 'br;q=0, gzip', 'gzip'],
-    ['compressionStream()', () => compressionStream(), 'gzip;q=0', null],
-    ['compressionStream()', () => compressionStream(), 'gzip;q=0.1, deflate;q=0.9', 'deflate'],
+    [
+      'compression()',
+      () => compression(),
+      'br;q=0, gzip',
+      'gzip',
+    ],
+    [
+      'compression()',
+      () => compression(),
+      'gzip;q=0',
+      null,
+    ],
+    [
+      'compression()',
+      () => compression(),
+      'gzip;q=0.1, deflate;q=0.9',
+      'deflate',
+    ],
+    [
+      'compressionStream()',
+      () => compressionStream(),
+      'br;q=0, gzip',
+      'gzip',
+    ],
+    [
+      'compressionStream()',
+      () => compressionStream(),
+      'gzip;q=0',
+      null,
+    ],
+    [
+      'compressionStream()',
+      () => compressionStream(),
+      'gzip;q=0.1, deflate;q=0.9',
+      'deflate',
+    ],
   ] as const)('%s with %j -> %s', async (_name, middleware, encoding, expected) => {
     const res = await get(appWith(middleware()), encoding)
 
@@ -232,12 +282,17 @@ describe.runIf(isV2)('negotiation on the h3 v2 middleware (#25)', () => {
     const body = Buffer.from(await res.arrayBuffer())
     const decoded = expected === 'gzip'
       ? zlib.gunzipSync(body)
-      : expected === 'deflate' ? zlib.inflateSync(body) : body
+      : expected === 'deflate'
+        ? zlib.inflateSync(body)
+        : body
     expect(decoded.toString()).toEqual(html)
   })
 
   it('keeps a Vary set by the handler', async () => {
-    for (const middleware of [compression(), compressionStream()]) {
+    for (const middleware of [
+      compression(),
+      compressionStream(),
+    ]) {
       const res = await get(appWith(middleware, 'Origin'), 'gzip')
 
       expect(res.headers.get('vary')).toEqual('Origin, Accept-Encoding')
@@ -252,7 +307,10 @@ describe.runIf(isV2)('negotiation on the h3 v2 middleware (#25)', () => {
   })
 
   it('passes bodyless responses through', async () => {
-    for (const middleware of [compression(), compressionStream()]) {
+    for (const middleware of [
+      compression(),
+      compressionStream(),
+    ]) {
       for (const path of ['/empty', '/no-content']) {
         const res = await get(appWith(middleware), 'gzip', path)
 
@@ -273,8 +331,14 @@ describe.runIf(isV1)('negotiation on the h3 v1 app hook (#25)', () => {
 
   for (const [name, hook] of [
     ['useCompression', useCompression],
-    ['useCompressionStream', (event: any, response: any) => useCompressionStream(event, response, { brotli: true })],
-    ['nuxt plugin', (event: any, response: any) => applyCompression(event, response, {})],
+    [
+      'useCompressionStream',
+      (event: any, response: any) => useCompressionStream(event, response, { brotli: true }),
+    ],
+    [
+      'nuxt plugin',
+      (event: any, response: any) => applyCompression(event, response, {}),
+    ],
   ] as const) {
     it(`${name} skips an encoding rejected with q=0`, async () => {
       const result = await appWith(hook).get('/').set('Accept-Encoding', 'br;q=0, gzip')

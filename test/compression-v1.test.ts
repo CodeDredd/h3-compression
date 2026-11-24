@@ -1,9 +1,9 @@
+import type { SuperTest, Test } from 'supertest'
 import { Buffer } from 'node:buffer'
 import zlib from 'node:zlib'
-import type { SuperTest, Test } from 'supertest'
+import * as h3 from 'h3'
 import supertest from 'supertest'
 import { beforeEach, describe, expect, it } from 'vitest'
-import * as h3 from 'h3'
 import { isZstdSupported, useCompression, useCompressionStream } from '../src'
 import { applyCompression } from '../src/runtime/nitro-plugin'
 import { isV1 } from './_version'
@@ -23,7 +23,10 @@ function rawParser(res: any, cb: (err: Error | null, body: Buffer) => void) {
 const { createApp, eventHandler, toNodeListener } = h3 as typeof import('h3')
 
 const html = '<h1>Hello World</h1>'
-const json = { message: 'hello world', items: [1, 2, 3, 4, 5] }
+const json = {
+  message: 'hello world',
+  items: [1, 2, 3, 4, 5],
+}
 
 function appWith(hook: typeof useCompression) {
   const app = createApp({ debug: true, onBeforeResponse: hook })

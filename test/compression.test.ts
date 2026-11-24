@@ -1,7 +1,7 @@
 import type { Buffer } from 'node:buffer'
 import zlib from 'node:zlib'
-import { describe, expect, it } from 'vitest'
 import * as h3 from 'h3'
+import { describe, expect, it } from 'vitest'
 import {
   useBrotliCompression,
   useCompression,
@@ -17,7 +17,9 @@ const { mockEvent } = h3 as typeof import('h3')
 const html = '<h1>Hello World</h1>'
 
 function eventFor(encoding: string) {
-  return mockEvent('/', { headers: { 'accept-encoding': encoding } })
+  return mockEvent('/', {
+    headers: { 'accept-encoding': encoding },
+  })
 }
 
 const decoders: Record<string, (input: Buffer) => Buffer> = {
@@ -39,7 +41,10 @@ describe.runIf(isV2)('useCompression (mutable response / nitro path)', () => {
 
   it('compresses an object (JSON) body and sets the content-type (#8)', async () => {
     const event = eventFor('gzip')
-    const json = { message: 'hello world', items: [1, 2, 3] }
+    const json = {
+      message: 'hello world',
+      items: [1, 2, 3],
+    }
     const response: { body: unknown } = { body: json }
 
     await useGZipCompression(event, response)

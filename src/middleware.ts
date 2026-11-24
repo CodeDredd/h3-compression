@@ -57,7 +57,9 @@ export interface CompressionStreamOptions extends StreamCompressionOptions {
  * @returns { CompressionMiddleware }
  */
 export function compression(options?: Compression | CompressionMiddlewareOptions): CompressionMiddleware {
-  const config: CompressionMiddlewareOptions = typeof options === 'string' ? { method: options } : { ...options }
+  const config: CompressionMiddlewareOptions = typeof options === 'string'
+    ? { method: options }
+    : { ...options }
 
   return (event, next) => compressResponse(event, next(), config.method, config)
 }
@@ -89,7 +91,9 @@ export function compression(options?: Compression | CompressionMiddlewareOptions
  * @returns { CompressionMiddleware }
  */
 export function compressionStream(options?: StreamCompression | CompressionStreamOptions): CompressionMiddleware {
-  const config: CompressionStreamOptions = typeof options === 'string' ? { method: options } : { ...options }
+  const config: CompressionStreamOptions = typeof options === 'string'
+    ? { method: options }
+    : { ...options }
 
   return (event, next) => compressResponseStream(event, next(), config.method, config)
 }

@@ -1,6 +1,6 @@
-import { addServerPlugin, addTemplate, defineNuxtModule } from '@nuxt/kit'
 import type { Nuxt } from '@nuxt/schema'
 import type { NuxtCompressionOptions } from './runtime/types'
+import { addServerPlugin, addTemplate, defineNuxtModule } from '@nuxt/kit'
 import { DEFAULT_CONTENT_TYPES, DEFAULT_EXCLUDE } from './runtime/nitro-plugin'
 
 export type { NuxtCompressionOptions } from './runtime/types'
