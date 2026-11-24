@@ -91,6 +91,21 @@ describe.runIf(isV2)('nuxt plugin — content type handling (#22)', () => {
 
     expect(getContentType(event, {})).toEqual('text/plain')
   })
+
+  it('reads the content type from the node response on h3 v1', () => {
+    const v1Event = {
+      node: {
+        res: {
+          getHeader: (name: string) => name === 'content-type'
+            ? 'image/png'
+            : undefined,
+        },
+      },
+    } as any
+
+    expect(getContentType(v1Event, {})).toEqual('image/png')
+    expect(shouldCompress(v1Event, {}, {})).toBe(false)
+  })
 })
 
 describe.runIf(isV2)('nuxt plugin — shouldCompress (#22)', () => {
